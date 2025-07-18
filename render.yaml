@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: ruta-cobros-app
+    runtime: python
+    buildCommand: ""
+    startCommand: gunicorn aplicación:app
+    envVars:
+      - key: FLASK_ENV
+        value: production
