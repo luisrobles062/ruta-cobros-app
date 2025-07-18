@@ -1,93 +1,48 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 import sqlite3
-from datetime import datetime
+import os
 
 app = Flask(__name__)
-app.secret_key = "clave_secreta"
+app.secret_key = 'secreto_super_seguro'  # Cambiar por algo más fuerte en producción
 
-def conectar_db():
-    return sqlite3.connect('cobros.db')
+# Ruta absoluta para la base de datos
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+db_path = os.path.join(BASE_DIR, 'cobros.db')
 
-@app.route("/")
-def acceso():
-    return render_template("login.html")
 
-@app.route("/ingresar", methods=["POST"])
-def ingresar():
-    usuario = request.form["usuario"]
-    clave = request.form["clave"]
-    if usuario == "admin" and clave == "1234":
-        session["usuario"] = usuario
-        return redirect(url_for("inicio"))
-    else:
-        flash("Usuario o contraseña incorrectos")
-        return redirect(url_for("acceso"))
+# === RUTA LOGIN ===
+@app.route('/', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        usuario = request.form['usuario']
+        contraseña = request.form['contraseña']
 
-@app.route("/inicio")
+        # Login básico por defecto
+        if usuario == 'admin' and contraseña == 'admin123':
+            session['usuario'] = usuario
+            return redirect('/inicio')
+        else:
+            flash('Usuario o contraseña incorrectos')
+            return redirect('/')
+    return render_template('login.html')
+
+
+# === RUTA PRINCIPAL PROTEGIDA ===
+@app.route('/inicio')
 def inicio():
-    if "usuario" not in session:
-        return redirect(url_for("acceso"))
-    conn = conectar_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM clientes")
-    clientes = cursor.fetchall()
-    conn.close()
-    return render_template("inicio.html", clientes=clientes)
+    if 'usuario' in session:
+        return render_template('inicio.html')  # Asegúrate de tener esta plantilla
+    else:
+        return redirect('/')
 
-@app.route("/agregar_cliente", methods=["POST"])
-def agregar_cliente():
-    if "usuario" not in session:
-        return redirect(url_for("acceso"))
-    nombre = request.form["nombre"]
-    deuda = float(request.form["deuda"])
-    observaciones = request.form["observaciones"]
-    fecha = datetime.now().strftime('%Y-%m-%d')
-    conn = conectar_db()
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO clientes (nombre, deuda, fecha_inicio, observaciones) VALUES (?, ?, ?, ?)",
-                   (nombre, deuda, fecha, observaciones))
-    conn.commit()
-    conn.close()
-    return redirect(url_for("inicio"))
 
-@app.route("/registrar_cobro", methods=["POST"])
-def registrar_cobro():
-    if "usuario" not in session:
-        return redirect(url_for("acceso"))
-    cliente_id = request.form["cliente_id"]
-    monto = float(request.form["monto"])
-    comentario = request.form["comentario"]
-    fecha = datetime.now().strftime('%Y-%m-%d')
-    conn = conectar_db()
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO cobros (cliente_id, monto, fecha, comentario) VALUES (?, ?, ?, ?)",
-                   (cliente_id, monto, fecha, comentario))
-    cursor.execute("UPDATE clientes SET deuda = deuda - ? WHERE id = ?", (monto, cliente_id))
-    conn.commit()
-    conn.close()
-    return redirect(url_for("inicio"))
+# === RUTA CERRAR SESIÓN ===
+@app.route('/logout')
+def logout():
+    session.pop('usuario', None)
+    return redirect('/')
 
-def crear_base_datos():
-    conn = conectar_db()
-    cursor = conn.cursor()
-    cursor.execute("""CREATE TABLE IF NOT EXISTS clientes (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        nombre TEXT,
-                        deuda REAL,
-                        fecha_inicio TEXT,
-                        observaciones TEXT)""")
-    cursor.execute("""CREATE TABLE IF NOT EXISTS cobros (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        cliente_id INTEGER,
-                        monto REAL,
-                        fecha TEXT,
-                        comentario TEXT)""")
-    conn.commit()
-    conn.close()
 
-# Crear tablas cuando arranca la app, tanto local como en Render
-crear_base_datos()
-
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000, debug=True)
-
+# === EJECUCIÓN LOCAL ===
+if __name__ == '__main__':
+    app.run(debug=True)
