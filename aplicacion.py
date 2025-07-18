@@ -67,7 +67,7 @@ def registrar_cobro():
     conn.close()
     return redirect(url_for("inicio"))
 
-if __name__ == "__main__":
+def crear_base_datos():
     conn = conectar_db()
     cursor = conn.cursor()
     cursor.execute("""CREATE TABLE IF NOT EXISTS clientes (
@@ -84,4 +84,10 @@ if __name__ == "__main__":
                         comentario TEXT)""")
     conn.commit()
     conn.close()
+
+# Crear tablas cuando arranca la app, tanto local como en Render
+crear_base_datos()
+
+if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=True)
+
