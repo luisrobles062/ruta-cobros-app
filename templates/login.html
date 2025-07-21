@@ -1,12 +1,64 @@
 <!DOCTYPE html>
-<html>
-<head><title>Login</title></head>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Iniciar Sesión</title>
+    <style>
+        body {
+            background-color: #f0f2f5;
+            font-family: Arial, sans-serif;
+            display: flex;
+            height: 100vh;
+            justify-content: center;
+            align-items: center;
+        }
+        .login-container {
+            background-color: white;
+            padding: 30px 40px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            width: 300px;
+        }
+        h2 {
+            text-align: center;
+            color: #333;
+        }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            width: 100%;
+            background-color: #007bff;
+            color: white;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .error {
+            color: red;
+            text-align: center;
+        }
+    </style>
+</head>
 <body>
-  <h2>Iniciar Sesión</h2>
-  <form action="/ingresar" method="POST">
-    <label>Usuario:</label><input type="text" name="usuario"><br>
-    <label>Contraseña:</label><input type="password" name="clave"><br>
-    <input type="submit" value="Ingresar">
-  </form>
+
+    <div class="login-container">
+        <h2>Iniciar Sesión</h2>
+        <form method="POST" action="/ingresar">
+            <input type="text" name="usuario" placeholder="Usuario" required>
+            <input type="password" name="clave" placeholder="Contraseña" required>
+            <button type="submit">Ingresar</button>
+        </form>
+    </div>
+
 </body>
 </html>
