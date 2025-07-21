@@ -1,11 +1,20 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 import sqlite3
 from datetime import datetime
+
 app = Flask(__name__)
 app.secret_key = 'clave_secreta'
 
 def conectar_db():
     return sqlite3.connect('cobros.db')
+
+def obtener_total_pagado(cliente_id):
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT SUM(monto) FROM cobros WHERE cliente_id = ?", (cliente_id,))
+    resultado = cursor.fetchone()[0]
+    conn.close()
+    return resultado if resultado else 0.0
 
 @app.route('/')
 def login():
@@ -26,8 +35,16 @@ def inicio():
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM clientes")
     clientes = cursor.fetchall()
+
+    clientes_actualizados = []
+    for cliente in clientes:
+        id, nombre, deuda, fecha_inicio, observaciones = cliente
+        total_pagado = obtener_total_pagado(id)
+        deuda_actual = deuda - total_pagado
+        clientes_actualizados.append((id, nombre, deuda, deuda_actual, fecha_inicio, observaciones))
+
     conn.close()
-    return render_template('inicio.html', clientes=clientes)
+    return render_template('inicio.html', clientes=clientes_actualizados)
 
 @app.route('/agregar_cliente', methods=['POST'])
 def agregar_cliente():
@@ -57,7 +74,6 @@ def registrar_cobro():
     cursor = conn.cursor()
     cursor.execute("INSERT INTO cobros (cliente_id, monto, fecha, comentario) VALUES (?, ?, ?, ?)",
                    (cliente_id, monto, fecha, comentario))
-    cursor.execute("UPDATE clientes SET deuda = deuda - ? WHERE id = ?", (monto, cliente_id))
     conn.commit()
     conn.close()
     return redirect('/inicio')
