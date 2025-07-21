@@ -2,71 +2,79 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Listado de Clientes</title>
+    <title>Panel de Clientes</title>
     <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f7f7f7;
+            padding: 20px;
+        }
+        h2 {
+            text-align: center;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
+            background-color: white;
         }
         th, td {
-            border: 1px solid #aaa;
-            padding: 8px;
+            border: 1px solid #cccccc;
+            padding: 10px;
             text-align: center;
         }
         th {
-            background-color: #eee;
+            background-color: #333;
+            color: white;
         }
         input[type="text"], input[type="number"] {
             width: 100%;
             padding: 5px;
         }
-        .filtro {
-            margin-bottom: 10px;
+        .form-inline {
+            display: flex;
+            gap: 5px;
+        }
+        .form-inline input, .form-inline button {
+            flex: 1;
+        }
+        .form-inline button {
+            padding: 5px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        .form-inline button:hover {
+            background-color: #218838;
         }
     </style>
-    <script>
-        function filtrarClientes() {
-            let filtro = document.getElementById("busqueda").value.toLowerCase();
-            let filas = document.querySelectorAll("tbody tr");
-            filas.forEach(fila => {
-                let nombre = fila.querySelector(".nombre").textContent.toLowerCase();
-                fila.style.display = nombre.includes(filtro) ? "" : "none";
-            });
-        }
-    </script>
 </head>
 <body>
-    <h2>Clientes registrados</h2>
-
-    <div class="filtro">
-        <label for="busqueda">Buscar cliente: </label>
-        <input type="text" id="busqueda" onkeyup="filtrarClientes()" placeholder="Escribe el nombre del cliente...">
-    </div>
-
+    <h2>Listado de Clientes</h2>
+    
     <table>
         <thead>
             <tr>
-                <th>Fecha inicio</th>
+                <th>Fecha Inicio</th>
                 <th>Nombre</th>
-                <th>Monto prestado</th>
-                <th>Deuda actual</th>
-                <th>Registrar pago</th>
+                <th>Monto Prestado</th>
+                <th>Deuda Actual</th>
+                <th>Registrar Pago</th>
             </tr>
         </thead>
         <tbody>
             {% for cliente in clientes %}
             <tr>
-                <td>{{ cliente[3] }}</td>
-                <td class="nombre">{{ cliente[1] }}</td>
-                <td>{{ cliente[2] + obtener_total_pagado(cliente[0]) | round(2) }}</td>
-                <td>{{ cliente[2] | round(2) }}</td>
+                <td>{{ cliente[4] }}</td>
+                <td>{{ cliente[1] }}</td>
+                <td>${{ '%.2f' % cliente[2] }}</td>
+                <td>${{ '%.2f' % cliente[3] }}</td>
                 <td>
-                    <form action="/registrar_cobro" method="POST">
+                    <form method="POST" action="/registrar_cobro" class="form-inline">
                         <input type="hidden" name="cliente_id" value="{{ cliente[0] }}">
-                        <input type="number" name="monto" step="0.01" placeholder="Valor a pagar" required>
+                        <input type="number" name="monto" step="0.01" placeholder="Monto" required>
                         <input type="text" name="comentario" placeholder="Comentario">
-                        <button type="submit">Guardar</button>
+                        <button type="submit">Agregar</button>
                     </form>
                 </td>
             </tr>
