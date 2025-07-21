@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head><title>Inicio</title></head>
+<body>
+  <h2>Clientes registrados</h2>
+  <ul>
+    {% for cliente in clientes %}
+      <li>{{ cliente[1] }} - Deuda: ${{ cliente[2] }}</li>
+    {% endfor %}
+  </ul>
+
+  <h3>Agregar nuevo cliente</h3>
+  <form action="/agregar_cliente" method="POST">
+    Nombre: <input type="text" name="nombre"><br>
+    Deuda: <input type="text" name="deuda"><br>
+    Observaciones: <input type="text" name="observaciones"><br>
+    <input type="submit" value="Agregar">
+  </form>
+
+  <h3>Registrar cobro</h3>
+  <form action="/registrar_cobro" method="POST">
+    Cliente ID: <input type="text" name="cliente_id"><br>
+    Monto: <input type="text" name="monto"><br>
+    Comentario: <input type="text" name="comentario"><br>
+    <input type="submit" value="Registrar">
+  </form>
+</body>
+</html>
