@@ -2,84 +2,93 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Panel de Clientes</title>
+    <title>Clientes - Plataforma de Cobros</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f7f7f7;
-            padding: 20px;
-        }
-        h2 {
-            text-align: center;
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; }
+        h1 { color: #333; }
+        input[type="text"], input[type="number"] {
+            padding: 5px; margin: 5px;
         }
         table {
             width: 100%;
             border-collapse: collapse;
+            margin-top: 15px;
             background-color: white;
         }
         th, td {
-            border: 1px solid #cccccc;
+            border: 1px solid #ccc;
             padding: 10px;
             text-align: center;
         }
         th {
-            background-color: #333;
-            color: white;
+            background-color: #e0e0e0;
         }
-        input[type="text"], input[type="number"] {
-            width: 100%;
-            padding: 5px;
+        tr:hover {
+            background-color: #f1f1f1;
         }
-        .form-inline {
+        .filtro {
+            margin-bottom: 15px;
+        }
+        .formulario-pago {
             display: flex;
+            justify-content: center;
+            align-items: center;
             gap: 5px;
         }
-        .form-inline input, .form-inline button {
-            flex: 1;
-        }
-        .form-inline button {
-            padding: 5px;
-            background-color: #28a745;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-        .form-inline button:hover {
-            background-color: #218838;
+        .formulario-pago input {
+            width: 80px;
         }
     </style>
 </head>
 <body>
-    <h2>Listado de Clientes</h2>
-    
-    <table>
+
+    <h1>Listado de Clientes</h1>
+
+    <div class="filtro">
+        <label for="filtro">Buscar cliente:</label>
+        <input type="text" id="filtro" onkeyup="filtrarClientes()" placeholder="Nombre del cliente...">
+    </div>
+
+    <table id="tablaClientes">
         <thead>
             <tr>
-                <th>Fecha Inicio</th>
+                <th>Fecha</th>
                 <th>Nombre</th>
                 <th>Monto Prestado</th>
                 <th>Deuda Actual</th>
-                <th>Registrar Pago</th>
+                <th>Agregar Pago</th>
             </tr>
         </thead>
         <tbody>
             {% for cliente in clientes %}
             <tr>
-                <td>{{ cliente[4] }}</td>
-                <td>{{ cliente[1] }}</td>
-                <td>${{ '%.2f' % cliente[2] }}</td>
-                <td>${{ '%.2f' % cliente[3] }}</td>
+                <td>{{ cliente[3] }}</td>
+                <td class="nombre">{{ cliente[1] }}</td>
+                <td>${{ '%.2f' % (cliente[2] + obtener_total_pagado(cliente[0])) }}</td>
+                <td><strong>${{ '%.2f' % cliente[2] }}</strong></td>
                 <td>
-                    <form method="POST" action="/registrar_cobro" class="form-inline">
+                    <form method="POST" action="/registrar_cobro" class="formulario-pago">
                         <input type="hidden" name="cliente_id" value="{{ cliente[0] }}">
-                        <input type="number" name="monto" step="0.01" placeholder="Monto" required>
+                        <input type="number" name="monto" step="0.01" required placeholder="$">
                         <input type="text" name="comentario" placeholder="Comentario">
-                        <button type="submit">Agregar</button>
+                        <button type="submit">Registrar</button>
                     </form>
                 </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+
+    <script>
+        function filtrarClientes() {
+            var input = document.getElementById("filtro").value.toLowerCase();
+            var filas = document.querySelectorAll("#tablaClientes tbody tr");
+            filas.forEach(function(fila) {
+                var nombre = fila.querySelector(".nombre").textContent.toLowerCase();
+                fila.style.display = nombre.includes(input) ? "" : "none";
+            });
+        }
+    </script>
+
 </body>
 </html>
