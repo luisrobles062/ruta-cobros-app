@@ -16,8 +16,10 @@ def login():
     if request.method == 'POST':
         usuario = request.form['usuario']
         clave = request.form['clave']
+        print(f"Login intento: usuario='{usuario}', clave='{clave}'")  # Imprime para debug
 
-        if usuario == 'admin' and clave == 'admin':
+        # Validación flexible
+        if usuario.strip().lower() == 'admin' and clave.strip() == 'admin':
             session['usuario'] = usuario
             return redirect('/inicio')
         else:
