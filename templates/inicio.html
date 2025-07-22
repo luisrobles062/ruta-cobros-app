@@ -23,6 +23,7 @@
         }
         .form-inline {
             display: flex;
+            flex-wrap: wrap;
             align-items: center;
             gap: 10px;
         }
@@ -37,7 +38,7 @@
     <h2 class="mb-4">Lista de Clientes</h2>
 
     <div class="mb-3">
-        <form class="form-inline" method="get">
+        <form class="form-inline" method="get" action="{{ url_for('inicio') }}">
             <input type="text" name="filtro_nombre" placeholder="Buscar cliente" class="form-control" value="{{ filtro_nombre }}">
             <button type="submit" class="btn btn-primary">Filtrar</button>
             <a href="{{ url_for('inicio') }}" class="btn btn-secondary">Limpiar</a>
@@ -70,7 +71,7 @@
                     <td class="{% if cliente['deuda_actual'] < 0 %}deuda-negativa{% endif %}">${{ "%.0f"|format(cliente['deuda_actual']) }}</td>
                     <td>{{ cliente['observacion'] }}</td>
                     <td>
-                        <form method="post" class="d-flex">
+                        <form method="post" action="{{ url_for('inicio') }}" class="d-flex">
                             <input type="hidden" name="cliente_id" value="{{ cliente['id'] }}">
                             <input type="number" step="1000" name="pago" class="form-control me-2" placeholder="Pago" required>
                             <button type="submit" class="btn btn-sm btn-primary btn-pago">Guardar</button>
