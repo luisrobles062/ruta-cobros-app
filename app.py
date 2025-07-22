@@ -8,6 +8,11 @@ app.secret_key = 'clave_secreta'
 def conectar_db():
     return sqlite3.connect('cobros.db')
 
+# Filtro para formato moneda con puntos
+@app.template_filter('format_currency')
+def format_currency_filter(value):
+    return "{:,.0f}".format(value).replace(',', '.')
+
 # ------------------ RUTAS ------------------
 
 # Login
@@ -31,20 +36,36 @@ def logout():
     session.clear()
     return redirect('/')
 
-# Inicio - mostrar todos los clientes
+# Inicio - mostrar clientes y pagos filtrados
 @app.route('/inicio')
 def inicio():
     if not session.get('usuario'):
         return redirect('/')
 
+    filtro_nombre = request.args.get('nombre', '').strip()
+
     conn = conectar_db()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM clientes ORDER BY nombre ASC")
-    clientes = cursor.fetchall()
-    conn.close()
 
-    return render_template('inicio.html', clientes=clientes)
+    if filtro_nombre:
+        # Buscar clientes que coincidan con el filtro
+        cursor.execute("SELECT * FROM clientes WHERE nombre LIKE ? ORDER BY nombre ASC", ('%' + filtro_nombre + '%',))
+        clientes = cursor.fetchall()
+
+        pagos = []
+        if clientes:
+            # Tomamos el primer cliente para mostrar sus pagos
+            cliente_id = clientes[0]['id']
+            cursor.execute("SELECT * FROM cobros WHERE cliente_id = ? ORDER BY fecha DESC", (cliente_id,))
+            pagos = cursor.fetchall()
+    else:
+        cursor.execute("SELECT * FROM clientes ORDER BY nombre ASC")
+        clientes = cursor.fetchall()
+        pagos = []
+
+    conn.close()
+    return render_template('inicio.html', clientes=clientes, pagos=pagos, filtro_nombre=filtro_nombre)
 
 # Nuevo cliente
 @app.route('/nuevo', methods=['GET', 'POST'])
@@ -82,40 +103,23 @@ def registrar_pago():
 
     conn = conectar_db()
     cursor = conn.cursor()
+
     cursor.execute("UPDATE clientes SET deuda = deuda - ? WHERE id = ?", (monto, cliente_id))
     cursor.execute(
         "INSERT INTO cobros (cliente_id, monto, comentario, fecha) VALUES (?, ?, ?, ?)",
         (cliente_id, monto, comentario, datetime.now().strftime('%Y-%m-%d'))
     )
+
     conn.commit()
     conn.close()
     return redirect('/inicio')
 
-# Ver pagos de un cliente específico
-@app.route('/pagos/<int:cliente_id>')
-def ver_pagos(cliente_id):
-    if not session.get('usuario'):
-        return redirect('/')
-
-    conn = conectar_db()
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute("SELECT nombre FROM clientes WHERE id = ?", (cliente_id,))
-    cliente = cursor.fetchone()
-
-    cursor.execute("SELECT monto, comentario, fecha FROM cobros WHERE cliente_id = ? ORDER BY fecha DESC", (cliente_id,))
-    pagos = cursor.fetchall()
-    conn.close()
-
-    return render_template('pagos.html', cliente=cliente, pagos=pagos)
-
-# ------------------ CREAR TABLAS ------------------
+# ------------------ CREAR TABLAS SI NO EXISTEN ------------------
 
 if __name__ == '__main__':
     conn = conectar_db()
     cursor = conn.cursor()
 
-    # Tabla clientes
     cursor.execute('''CREATE TABLE IF NOT EXISTS clientes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nombre TEXT,
@@ -124,7 +128,6 @@ if __name__ == '__main__':
         observaciones TEXT
     )''')
 
-    # Tabla cobros
     cursor.execute('''CREATE TABLE IF NOT EXISTS cobros (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         cliente_id INTEGER,
