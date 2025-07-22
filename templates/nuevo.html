@@ -1,91 +1,38 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Agregar Nuevo Cliente</title>
+    <meta charset="UTF-8" />
+    <title>Nuevo Cliente</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            max-width: 500px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-        h1 {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        form {
-            background-color: #f9f9f9;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 8px rgba(0,0,0,0.1);
-        }
-        label {
-            display: block;
-            margin-top: 15px;
-            font-weight: bold;
-        }
-        input[type="text"],
-        input[type="number"],
-        input[type="date"],
-        textarea {
-            width: 100%;
-            padding: 8px;
-            margin-top: 6px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            box-sizing: border-box;
-            font-size: 14px;
-        }
-        textarea {
-            resize: vertical;
-            height: 80px;
-        }
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        form { max-width: 400px; }
+        label { display: block; margin-top: 10px; }
+        input, textarea { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; }
         input[type="submit"] {
-            margin-top: 20px;
-            background-color: #28a745;
-            color: white;
-            padding: 12px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            width: 100%;
-            font-size: 16px;
+            background-color: #28a745; color: white; border: none; padding: 10px;
+            margin-top: 15px; cursor: pointer; border-radius: 4px;
         }
-        input[type="submit"]:hover {
-            background-color: #218838;
-        }
-        .btn-regresar {
-            display: inline-block;
-            margin-top: 15px;
-            text-decoration: none;
-            color: #555;
-        }
-        .btn-regresar:hover {
-            text-decoration: underline;
-        }
+        input[type="submit"]:hover { background-color: #218838; }
+        a { display: inline-block; margin-top: 10px; text-decoration: none; color: #555; }
     </style>
 </head>
 <body>
-    <h1>Agregar Nuevo Cliente</h1>
-
+    <h2>Agregar Nuevo Cliente</h2>
     <form method="POST" action="/nuevo">
-        <label for="nombre">Nombre</label>
-        <input type="text" id="nombre" name="nombre" required placeholder="Nombre del cliente">
+        <label for="nombre">Nombre:</label>
+        <input type="text" name="nombre" id="nombre" required>
 
-        <label for="deuda">Monto de la deuda (o préstamo)</label>
-        <input type="number" id="deuda" name="deuda" required min="0" step="0.01" placeholder="Ejemplo: 50000">
+        <label for="monto_prestado">Monto Prestado:</label>
+        <input type="number" name="monto_prestado" id="monto_prestado" min="0" step="0.01" required>
 
-        <label for="fecha_inicio">Fecha de inicio</label>
-        <input type="date" id="fecha_inicio" name="fecha_inicio" required>
+        <label for="fecha_inicio">Fecha de Inicio:</label>
+        <input type="date" name="fecha_inicio" id="fecha_inicio" required>
 
-        <label for="observaciones">Observaciones</label>
-        <textarea id="observaciones" name="observaciones" placeholder="Notas adicionales"></textarea>
+        <label for="observaciones">Observaciones:</label>
+        <textarea name="observaciones" id="observaciones"></textarea>
 
-        <input type="submit" value="Guardar Cliente">
+        <input type="submit" value="Guardar">
     </form>
-
-    <a href="/inicio" class="btn-regresar">← Volver al listado de clientes</a>
+    <a href="/inicio">Volver al listado</a>
 </body>
 </html>
