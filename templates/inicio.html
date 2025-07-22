@@ -1,66 +1,68 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <title>Listado de Clientes</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        h1 {
-            text-align: center;
-        }
-        #filtroNombre {
-            margin-bottom: 15px;
-            padding: 8px;
-            width: 300px;
+            margin: 30px;
         }
         table {
-            border-collapse: collapse;
             width: 100%;
-            margin-bottom: 15px;
+            border-collapse: collapse;
+            margin-top: 15px;
         }
         th, td {
-            border: 1px solid #ddd;
+            border: 1px solid #999;
             padding: 8px;
-            text-align: left;
+            text-align: center;
         }
         th {
-            background-color: #28a745;
+            background-color: #007bff;
             color: white;
         }
-        tr:hover {
-            background-color: #f5f5f5;
+        #filtro {
+            margin-bottom: 15px;
+            padding: 7px;
+            width: 200px;
+            font-size: 16px;
         }
-        .btn {
-            background-color: #28a745;
-            color: white;
-            padding: 10px 15px;
+        a {
             text-decoration: none;
-            border-radius: 5px;
-            margin-right: 10px;
+            color: #007bff;
+            font-weight: bold;
+            margin-bottom: 15px;
             display: inline-block;
         }
-        .btn:hover {
-            background-color: #218838;
+        a:hover {
+            color: #0056b3;
         }
-        .centrar {
-            text-align: center;
+        #cerrar {
+            margin-top: 15px;
+            display: inline-block;
+            background-color: #dc3545;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+        }
+        #cerrar:hover {
+            background-color: #b02a37;
         }
     </style>
 </head>
 <body>
+
     <h1>Listado de Clientes</h1>
 
-    <div>
-        <a href="/nuevo" class="btn">Agregar Nuevo Cliente</a>
-        <a href="/logout" class="btn">Cerrar sesión</a>
-    </div>
+    <!-- Enlace para agregar cliente -->
+    <a href="/nuevo">Agregar Nuevo Cliente</a><br/>
 
-    <label for="filtroNombre">Filtrar por nombre:</label><br>
-    <input type="text" id="filtroNombre" placeholder="Escribe el nombre para filtrar...">
+    <!-- Filtro de búsqueda -->
+    <label for="filtro">Filtrar por nombre:</label>
+    <input type="text" id="filtro" onkeyup="filtrarTabla()" placeholder="Escribe un nombre..." />
 
+    <!-- Tabla de clientes -->
     <table id="tablaClientes">
         <thead>
             <tr>
@@ -74,65 +76,46 @@
         </thead>
         <tbody>
             {% if clientes|length == 0 %}
-            <tr>
-                <td colspan="6" class="centrar">No hay clientes registrados.</td>
-            </tr>
+                <tr><td colspan="6">No hay clientes registrados.</td></tr>
             {% else %}
-            {% for cliente in clientes %}
-            <tr>
-                <td>{{ cliente['fecha_inicio'] }}</td>
-                <td>{{ cliente['nombre'] }}</td>
-                <td>{{ cliente['deuda'] + 0 }}</td> <!-- Aquí puedes ajustar si tienes monto prestado distinto -->
-                <td>{{ cliente['deuda'] }}</td>
-                <td>{{ cliente['observaciones'] }}</td>
-                <td>
-                    <form action="/pago" method="POST" style="margin:0;">
-                        <input type="hidden" name="cliente_id" value="{{ cliente['id'] }}">
-                        <input type="number" name="monto" min="0.01" step="0.01" placeholder="Monto pago" required>
-                        <input type="submit" value="Registrar pago">
-                    </form>
-                </td>
-            </tr>
-            {% endfor %}
+                {% for cliente in clientes %}
+                <tr>
+                    <td>{{ cliente.fecha_inicio }}</td>
+                    <td>{{ cliente.nombre }}</td>
+                    <td>{{ '%.2f'|format(cliente.deuda) }}</td>
+                    <td>{{ '%.2f'|format(cliente.deuda) }}</td>
+                    <td>{{ cliente.observaciones }}</td>
+                    <td>
+                        <!-- Aquí puedes poner un formulario o enlace para pagar -->
+                        <form action="/pago" method="POST" style="margin:0;">
+                            <input type="hidden" name="cliente_id" value="{{ cliente.id }}" />
+                            <input type="number" step="0.01" min="0" name="monto" placeholder="Monto" required style="width:70px;" />
+                            <input type="submit" value="Pagar" />
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
             {% endif %}
         </tbody>
     </table>
 
+    <br />
+    <a href="/logout" id="cerrar">Cerrar sesión</a>
+
     <script>
-        const filtroInput = document.getElementById('filtroNombre');
-        const tabla = document.getElementById('tablaClientes').getElementsByTagName('tbody')[0];
+        function filtrarTabla() {
+            const filtro = document.getElementById('filtro').value.toLowerCase();
+            const filas = document.querySelectorAll('#tablaClientes tbody tr');
 
-        filtroInput.addEventListener('input', function () {
-            const filtro = this.value.toLowerCase();
-
-            let filas = tabla.getElementsByTagName('tr');
-            let visibles = 0;
-
-            for (let i = 0; i < filas.length; i++) {
-                let nombre = filas[i].getElementsByTagName('td')[1]; // columna nombre
-                if (!nombre) continue; // por si no hay td
-
-                if (nombre.textContent.toLowerCase().indexOf(filtro) > -1) {
-                    filas[i].style.display = '';
-                    visibles++;
+            filas.forEach(fila => {
+                const nombre = fila.cells[1].textContent.toLowerCase();
+                if (nombre.includes(filtro)) {
+                    fila.style.display = '';
                 } else {
-                    filas[i].style.display = 'none';
+                    fila.style.display = 'none';
                 }
-            }
-
-            // Si no hay filas visibles, mostrar mensaje
-            if (visibles === 0) {
-                if (!document.getElementById('noResultados')) {
-                    const filaNo = document.createElement('tr');
-                    filaNo.id = 'noResultados';
-                    filaNo.innerHTML = `<td colspan="6" class="centrar">No hay clientes con ese nombre.</td>`;
-                    tabla.appendChild(filaNo);
-                }
-            } else {
-                let noRes = document.getElementById('noResultados');
-                if (noRes) noRes.remove();
-            }
-        });
+            });
+        }
     </script>
 </body>
 </html>
