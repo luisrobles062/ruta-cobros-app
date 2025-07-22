@@ -1,10 +1,16 @@
 from flask import Flask, render_template, request, redirect, session
 import sqlite3
+from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = 'clave_secreta'  # Puedes cambiar esto por otra clave
+app.secret_key = 'clave_secreta'
 
-# Ruta de inicio de sesión
+def conectar_db():
+    return sqlite3.connect('cobros.db')
+
+# ------------------ RUTAS ------------------
+
+# Login
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -19,21 +25,19 @@ def login():
 
     return render_template('login.html')
 
-
-# Ruta de cierre de sesión
+# Logout
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect('/')
 
-
-# Ruta para mostrar clientes al iniciar sesión
+# Inicio - mostrar todos los clientes
 @app.route('/inicio')
 def inicio():
     if not session.get('usuario'):
         return redirect('/')
 
-    conn = sqlite3.connect('cobros.db')
+    conn = conectar_db()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
@@ -41,11 +45,9 @@ def inicio():
     clientes = cursor.fetchall()
 
     conn.close()
-
     return render_template('inicio.html', clientes=clientes)
 
-
-# Ruta para registrar un nuevo cliente
+# Nuevo cliente
 @app.route('/nuevo', methods=['GET', 'POST'])
 def nuevo_cliente():
     if not session.get('usuario'):
@@ -57,18 +59,19 @@ def nuevo_cliente():
         fecha_inicio = request.form['fecha_inicio']
         observaciones = request.form['observaciones']
 
-        conn = sqlite3.connect('cobros.db')
+        conn = conectar_db()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO clientes (nombre, deuda, fecha_inicio, observaciones) VALUES (?, ?, ?, ?)",
-                       (nombre, deuda, fecha_inicio, observaciones))
+        cursor.execute(
+            "INSERT INTO clientes (nombre, deuda, fecha_inicio, observaciones) VALUES (?, ?, ?, ?)",
+            (nombre, deuda, fecha_inicio, observaciones)
+        )
         conn.commit()
         conn.close()
         return redirect('/inicio')
 
     return render_template('nuevo.html')
 
-
-# Ruta para registrar un pago
+# Registrar pago
 @app.route('/pago', methods=['POST'])
 def registrar_pago():
     if not session.get('usuario'):
@@ -78,21 +81,44 @@ def registrar_pago():
     monto = float(request.form['monto'])
     comentario = request.form.get('comentario', '')
 
-    conn = sqlite3.connect('cobros.db')
+    conn = conectar_db()
     cursor = conn.cursor()
 
-    # Restar el pago a la deuda
     cursor.execute("UPDATE clientes SET deuda = deuda - ? WHERE id = ?", (monto, cliente_id))
+    cursor.execute(
+        "INSERT INTO cobros (cliente_id, monto, comentario, fecha) VALUES (?, ?, ?, ?)",
+        (cliente_id, monto, comentario, datetime.now().strftime('%Y-%m-%d'))
+    )
 
-    # Registrar el pago en la tabla 'cobros'
-    cursor.execute("INSERT INTO cobros (cliente_id, monto, comentario) VALUES (?, ?, ?)",
-                   (cliente_id, monto, comentario))
+    conn.commit()
+    conn.close()
+    return redirect('/inicio')
+
+# ------------------ CREAR TABLAS SI NO EXISTEN ------------------
+
+if __name__ == '__main__':
+    conn = conectar_db()
+    cursor = conn.cursor()
+
+    # Crear tabla 'clientes'
+    cursor.execute('''CREATE TABLE IF NOT EXISTS clientes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT,
+        deuda REAL,
+        fecha_inicio TEXT,
+        observaciones TEXT
+    )''')
+
+    # Crear tabla 'cobros'
+    cursor.execute('''CREATE TABLE IF NOT EXISTS cobros (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cliente_id INTEGER,
+        monto REAL,
+        comentario TEXT,
+        fecha TEXT DEFAULT (date('now'))
+    )''')
 
     conn.commit()
     conn.close()
 
-    return redirect('/inicio')
-
-
-if __name__ == '__main__':
     app.run(debug=True)
