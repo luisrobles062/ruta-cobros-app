@@ -2,88 +2,76 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Plataforma de Cobros</title>
+    <title>Panel de Clientes</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <style>
         body {
-            padding: 20px;
+            background-color: #f4f4f4;
         }
-        .table-container {
-            margin-top: 30px;
+        .container {
+            margin-top: 40px;
         }
-        .form-control-inline {
-            width: auto;
-            display: inline-block;
+        .form-control, .btn {
+            border-radius: 0;
         }
-        .resumen {
-            margin-top: 30px;
+        table {
+            background-color: white;
         }
-        .pagado {
-            background-color: #d4edda;
-        }
-        .mora {
-            background-color: #f8d7da;
+        th, td {
+            text-align: center;
+            vertical-align: middle;
         }
     </style>
 </head>
 <body>
-    <h2 class="text-center">Resumen de Clientes</h2>
+<div class="container">
+    <h2 class="mb-4 text-center">Panel de Control - Clientes</h2>
 
-    <!-- Filtros -->
-    <form method="GET" action="{{ url_for('inicio') }}" class="mb-4 d-flex gap-2">
-        <input type="text" name="cliente" class="form-control" placeholder="Buscar cliente..." value="{{ request.args.get('cliente', '') }}">
-        <input type="date" name="fecha" class="form-control" value="{{ request.args.get('fecha', '') }}">
-        <button type="submit" class="btn btn-primary">Filtrar</button>
-        <a href="{{ url_for('inicio') }}" class="btn btn-secondary">Limpiar filtros</a>
+    <!-- Filtro por nombre -->
+    <form method="get" action="{{ url_for('inicio') }}" class="row g-3 mb-4">
+        <div class="col-md-4">
+            <input type="text" name="filtro_nombre" class="form-control" placeholder="Filtrar por nombre..." value="{{ request.args.get('filtro_nombre', '') }}">
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-primary">Filtrar</button>
+        </div>
     </form>
 
     <!-- Tabla de clientes -->
-    <div class="table-container">
-        <form method="POST" action="{{ url_for('registrar_pago') }}">
-            <table class="table table-bordered table-hover table-striped">
-                <thead class="table-dark">
-                    <tr>
-                        <th>Fecha Prestada</th>
-                        <th>Nombre</th>
-                        <th>Monto Prestado</th>
-                        <th>Rédito</th>
-                        <th>Deuda Actual</th>
-                        <th>Observación</th>
-                        <th>Pago</th>
-                        <th>Acción</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for cliente in clientes %}
-                    <tr class="{% if cliente['deuda_actual'] <= 0 %}pagado{% elif cliente['dias_mora'] > 3 %}mora{% endif %}">
-                        <td>{{ cliente['fecha_prestada'] }}</td>
-                        <td>{{ cliente['nombre'] }}</td>
-                        <td>${{ "{:,.0f}".format(cliente['monto_prestado']) }}</td>
-                        <td>${{ "{:,.0f}".format(cliente['redito']) }}</td>
-                        <td>${{ "{:,.0f}".format(cliente['deuda_actual']) }}</td>
-                        <td>{{ cliente['observacion'] }}</td>
-                        <td>
-                            <input type="number" name="pagos[{{ cliente['id'] }}]" class="form-control form-control-inline" placeholder="Pago">
-                        </td>
-                        <td>
-                            <button type="submit" class="btn btn-success btn-sm">Registrar</button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </form>
-    </div>
-
-    <!-- Resumen general -->
-    <div class="resumen">
-        <h4>Resumen del Día</h4>
-        <ul>
-            <li>Total Clientes: {{ resumen.total_clientes }}</li>
-            <li>Total Recaudado Hoy: ${{ "{:,.0f}".format(resumen.total_pagado_hoy) }}</li>
-            <li>Total Deuda Restante: ${{ "{:,.0f}".format(resumen.total_deuda_restante) }}</li>
-        </ul>
-    </div>
-
+    <form method="post" action="{{ url_for('registrar_pago') }}">
+        <table class="table table-bordered table-striped">
+            <thead class="table-dark">
+                <tr>
+                    <th>Fecha Prestada</th>
+                    <th>Nombre</th>
+                    <th>Monto Prestado</th>
+                    <th>% Rédito</th>
+                    <th>Deuda Actual</th>
+                    <th>Observación</th>
+                    <th>Pago</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cliente in clientes %}
+                <tr>
+                    <td>{{ cliente.fecha_prestada }}</td>
+                    <td>{{ cliente.nombre }}</td>
+                    <td>${{ "{:,.0f}".format(cliente.monto_prestado) }}</td>
+                    <td>${{ "{:,.0f}".format(cliente.porcentaje_reditos) }}</td>
+                    <td>${{ "{:,.0f}".format(cliente.deuda_actual) }}</td>
+                    <td>{{ cliente.observacion }}</td>
+                    <td>
+                        <input type="number" name="pagos[{{ cliente.id }}]" class="form-control" placeholder="Ingrese pago">
+                    </td>
+                    <td>
+                        <button type="submit" name="id_cliente" value="{{ cliente.id }}" class="btn btn-success btn-sm">Registrar</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </form>
+</div>
 </body>
 </html>
