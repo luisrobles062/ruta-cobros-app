@@ -4,78 +4,39 @@
     <meta charset="UTF-8">
     <title>Panel de Clientes</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #eef2f3;
-            margin: 0;
-            padding: 20px;
-        }
-        h2 {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        input[type="text"] {
-            margin-bottom: 10px;
-            padding: 8px;
-            width: 300px;
-            display: block;
-            margin-left: auto;
-            margin-right: auto;
-        }
-        table {
-            width: 90%;
-            margin: auto;
-            border-collapse: collapse;
-            background-color: white;
-        }
-        th, td {
-            border: 1px solid #ccc;
-            padding: 8px;
-            text-align: center;
-        }
-        th {
-            background-color: #007bff;
-            color: white;
-        }
-        tr:nth-child(even) {
-            background-color: #f2f2f2;
-        }
-        form {
-            margin: 0;
-        }
-        button {
-            padding: 6px 12px;
-            background-color: #28a745;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #218838;
-        }
+        body { font-family: Arial; margin: 20px; background: #f2f2f2; }
+        h2 { color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #fff; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+        th { background-color: #4CAF50; color: white; }
+        input[type="number"] { width: 70px; }
+        .filter-container { margin-bottom: 20px; }
     </style>
     <script>
         function filtrarClientes() {
-            var filtro = document.getElementById("busqueda").value.toLowerCase();
-            var filas = document.getElementsByClassName("fila-cliente");
-
-            for (var i = 0; i < filas.length; i++) {
-                var nombre = filas[i].getElementsByClassName("nombre")[0].innerText.toLowerCase();
-                filas[i].style.display = nombre.includes(filtro) ? "" : "none";
-            }
+            const filtro = document.getElementById('filtroNombre').value.toLowerCase();
+            const filas = document.querySelectorAll('#tablaClientes tbody tr');
+            filas.forEach(fila => {
+                const nombre = fila.querySelector('.nombre').innerText.toLowerCase();
+                fila.style.display = nombre.includes(filtro) ? '' : 'none';
+            });
         }
     </script>
 </head>
 <body>
-    <h2>Lista de Clientes</h2>
+    <h2>Listado de Clientes</h2>
 
-    <input type="text" id="busqueda" onkeyup="filtrarClientes()" placeholder="Buscar por nombre...">
+    <div class="filter-container">
+        <label for="filtroNombre"><strong>Filtrar por nombre:</strong></label>
+        <input type="text" id="filtroNombre" onkeyup="filtrarClientes()" placeholder="Escribe un nombre...">
+    </div>
 
-    <table>
+    <table id="tablaClientes">
         <thead>
             <tr>
                 <th>Fecha</th>
                 <th>Nombre</th>
+                <th>Monto Prestado</th>
                 <th>Deuda Actual</th>
                 <th>Observaciones</th>
                 <th>Pago</th>
@@ -83,21 +44,26 @@
         </thead>
         <tbody>
             {% for cliente in clientes %}
-            <tr class="fila-cliente">
-                <td>{{ cliente.fecha_inicio }}</td>
-                <td class="nombre">{{ cliente.nombre }}</td>
-                <td>${{ '%.2f' % cliente.deuda }}</td>
-                <td>{{ cliente.observaciones }}</td>
+            <tr>
+                <td>{{ cliente[3] }}</td> <!-- fecha_inicio -->
+                <td class="nombre">{{ cliente[1] }}</td> <!-- nombre -->
+                <td>${{ "%.2f"|format(cliente[2]) }}</td> <!-- deuda inicial -->
+                <td>${{ "%.2f"|format(cliente[2]) }}</td> <!-- deuda actual (por ahora igual al prestado) -->
+                <td>{{ cliente[4] }}</td> <!-- observaciones -->
                 <td>
-                    <form method="POST" action="/registrar_pago">
-                        <input type="hidden" name="cliente_id" value="{{ cliente.id }}">
-                        <input type="number" name="monto_pago" step="0.01" placeholder="Monto" required>
-                        <button type="submit">Registrar</button>
+                    <form action="/registrar_cobro" method="POST">
+                        <input type="hidden" name="cliente_id" value="{{ cliente[0] }}">
+                        <input type="number" name="monto" step="0.01" required>
+                        <input type="text" name="comentario" placeholder="Comentario" required>
+                        <button type="submit">Pagar</button>
                     </form>
                 </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+
+    <br>
+    <a href="/logout">Cerrar sesión</a>
 </body>
 </html>
