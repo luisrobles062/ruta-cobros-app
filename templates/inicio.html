@@ -4,141 +4,77 @@
     <meta charset="UTF-8" />
     <title>Listado de Clientes</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        input[type="text"] { padding: 6px; width: 250px; }
+        a.button {
+            background-color: #28a745; color: white; padding: 8px 15px; text-decoration: none; border-radius: 4px;
+            margin-left: 15px;
         }
-        h1 {
-            margin-bottom: 20px;
-        }
-        label {
-            font-weight: bold;
-        }
-        input[type="text"] {
-            padding: 5px;
-            margin-left: 10px;
-            margin-bottom: 15px;
-            width: 300px;
-            border-radius: 4px;
-            border: 1px solid #ccc;
-        }
-        table {
-            border-collapse: collapse;
-            width: 100%;
-            margin-bottom: 30px;
-        }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 10px;
-            text-align: left;
-        }
-        th {
-            background-color: #0a78e0;
-            color: white;
-        }
-        tr:nth-child(even) {
-            background-color: #f9f9f9;
-        }
-        .btn-pago {
-            padding: 6px 12px;
-            background-color: #28a745;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        .btn-pago:hover {
-            background-color: #218838;
-        }
+        a.button:hover { background-color: #218838; }
         .logout {
-            margin-top: 20px;
+            float: right;
+            margin-top: -40px;
+            background-color: #dc3545;
+            color: white;
+            padding: 8px 15px;
+            text-decoration: none;
+            border-radius: 4px;
         }
-        .section-pagos {
-            margin-top: 40px;
-        }
-        .no-data {
-            color: #777;
-            font-style: italic;
+        .logout:hover { background-color: #b02a37; }
+        .payment-form input[type="number"] {
+            width: 90px;
         }
     </style>
 </head>
 <body>
-    <h1>Listado de Clientes</h1>
+    <h2>Listado de Clientes</h2>
 
     <form method="GET" action="/inicio">
-        <label for="nombre">Filtrar por nombre:</label>
-        <input type="text" id="nombre" name="nombre" placeholder="Buscar cliente..." value="{{ filtro_nombre }}">
+        <label for="filtro">Filtrar por nombre: </label>
+        <input type="text" id="filtro" name="filtro" placeholder="Buscar cliente..." value="{{ filtro }}">
         <input type="submit" value="Buscar">
-        <a href="/nuevo" style="margin-left: 10px;">Agregar nuevo cliente</a>
+        <a href="/nuevo" class="button">Agregar nuevo cliente</a>
+        <a href="/logout" class="logout">Cerrar sesión</a>
     </form>
 
     {% if clientes|length == 0 %}
-        <p class="no-data">No hay clientes registrados.</p>
+        <p>No hay clientes registrados.</p>
     {% else %}
-        <table>
-            <thead>
-                <tr>
-                    <th>Fecha</th>
-                    <th>Nombre</th>
-                    <th>Monto Prestado</th>
-                    <th>Deuda Actual</th>
-                    <th>Observaciones</th>
-                    <th>Registrar Pago</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for cliente in clientes %}
-                    <tr>
-                        <td>{{ cliente.fecha_inicio }}</td>
-                        <td>{{ cliente.nombre }}</td>
-                        <td>{{ cliente.deuda | format_currency }}</td>
-                        <td>{{ cliente.deuda | format_currency }}</td>
-                        <td>{{ cliente.observaciones }}</td>
-                        <td>
-                            <form action="/pago" method="POST" style="display:inline;">
-                                <input type="hidden" name="cliente_id" value="{{ cliente.id }}">
-                                <input type="number" name="monto" min="1" placeholder="Monto" required>
-                                <input type="text" name="comentario" placeholder="Comentario (opcional)">
-                                <button type="submit" class="btn-pago">Pagar</button>
-                            </form>
-                        </td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Nombre</th>
+                <th>Monto Prestado</th>
+                <th>Deuda Actual</th>
+                <th>Observaciones</th>
+                <th>Registrar Pago</th>
+                <th>Ver Pagos</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cliente in clientes %}
+            <tr>
+                <td>{{ cliente['fecha_inicio'] }}</td>
+                <td>{{ cliente['nombre'] }}</td>
+                <td>{{ "{:,.0f}".format(cliente['monto_prestado']) | replace(',', '.') }}</td>
+                <td>{{ "{:,.0f}".format(cliente['deuda']) | replace(',', '.') }}</td>
+                <td>{{ cliente['observaciones'] }}</td>
+                <td>
+                    <form method="POST" action="/pago" class="payment-form">
+                        <input type="hidden" name="cliente_id" value="{{ cliente['id'] }}">
+                        <input type="number" name="monto" min="1" placeholder="Monto" required>
+                        <input type="submit" value="Pagar">
+                    </form>
+                </td>
+                <td><a href="/pagos/{{ cliente['id'] }}">Ver pagos</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
     {% endif %}
-
-    <div class="section-pagos">
-        <h2>Pagos del cliente</h2>
-
-        {% if pagos|length == 0 and filtro_nombre %}
-            <p class="no-data">No hay pagos registrados para este cliente.</p>
-        {% elif pagos|length > 0 %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Fecha Pago</th>
-                        <th>Monto</th>
-                        <th>Comentario</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for pago in pagos %}
-                    <tr>
-                        <td>{{ pago.fecha }}</td>
-                        <td>{{ pago.monto | format_currency }}</td>
-                        <td>{{ pago.comentario }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <p>Use el filtro para buscar un cliente y ver sus pagos.</p>
-        {% endif %}
-    </div>
-
-    <div class="logout">
-        <a href="/logout">Cerrar sesión</a>
-    </div>
 </body>
 </html>
