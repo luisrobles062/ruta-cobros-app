@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Historial de Pagos</title>
+</head>
+<body>
+    <h2>Historial de pagos de {{ cliente.nombre }}</h2>
+
+    <table border="1" cellpadding="6">
+        <tr>
+            <th>Fecha</th>
+            <th>Monto</th>
+            <th>Comentario</th>
+        </tr>
+        {% for pago in pagos %}
+        <tr>
+            <td>{{ pago['fecha'] }}</td>
+            <td>{{ "{:,.0f}".format(pago['monto']) }}</td>
+            <td>{{ pago['comentario'] }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <br>
+    <a href="/inicio">Volver al listado</a>
+</body>
+</html>
