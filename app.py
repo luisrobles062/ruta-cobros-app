@@ -1,150 +1,100 @@
-from flask import Flask, render_template, request, redirect, session
+from flask import Flask, render_template, request, redirect, session, url_for
 import sqlite3
 from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = 'clave_secreta'
 
-def conectar_db():
-    return sqlite3.connect('cobros.db')
+def get_db_connection():
+    conn = sqlite3.connect('cobros.db')
+    conn.row_factory = sqlite3.Row
+    return conn
 
-# ------------------ RUTAS ------------------
-
-# Login
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         usuario = request.form['usuario']
-        clave = request.form['clave']
-
-        if usuario == 'admin' and clave == 'admin':
+        contraseña = request.form['contraseña']
+        if usuario == 'admin' and contraseña == 'admin':
             session['usuario'] = usuario
             return redirect('/inicio')
         else:
-            return render_template('login.html', error='Credenciales inválidas')
-
+            return render_template('login.html', error='Credenciales incorrectas')
     return render_template('login.html')
 
-# Logout
 @app.route('/logout')
 def logout():
-    session.clear()
+    session.pop('usuario', None)
     return redirect('/')
 
-# Inicio - mostrar todos los clientes y filtros
 @app.route('/inicio')
 def inicio():
-    if not session.get('usuario'):
+    if 'usuario' not in session:
         return redirect('/')
 
-    filtro = request.args.get('filtro', '')
-
-    conn = conectar_db()
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
-    if filtro:
-        cursor.execute("SELECT * FROM clientes WHERE nombre LIKE ? ORDER BY nombre ASC", ('%'+filtro+'%',))
-    else:
-        cursor.execute("SELECT * FROM clientes ORDER BY nombre ASC")
-
-    clientes = cursor.fetchall()
-
+    filtro = request.args.get('filtro', '').lower()
+    conn = get_db_connection()
+    clientes = conn.execute('SELECT * FROM clientes').fetchall()
+    pagos = conn.execute('SELECT cliente_id, SUM(monto) as total_pagado FROM pagos GROUP BY cliente_id').fetchall()
     conn.close()
-    return render_template('inicio.html', clientes=clientes, filtro=filtro)
 
-# Nuevo cliente
+    pagos_dict = {p['cliente_id']: p['total_pagado'] for p in pagos}
+    clientes_filtrados = []
+
+    for c in clientes:
+        if filtro in c['nombre'].lower():
+            cliente = dict(c)
+            cliente['deuda_actual'] = c['monto'] - pagos_dict.get(c['id'], 0)
+            clientes_filtrados.append(cliente)
+
+    return render_template('inicio.html', clientes=clientes_filtrados, filtro=filtro)
+
+@app.route('/pago/<int:id>', methods=['POST'])
+def registrar_pago(id):
+    if 'usuario' not in session:
+        return redirect('/')
+
+    monto = float(request.form['monto'])
+    fecha = datetime.now().strftime('%Y-%m-%d')
+
+    conn = get_db_connection()
+    conn.execute('INSERT INTO pagos (cliente_id, monto, fecha) VALUES (?, ?, ?)', (id, monto, fecha))
+    conn.commit()
+    conn.close()
+
+    return redirect('/inicio')
+
+@app.route('/pagos/<int:id>')
+def ver_pagos(id):
+    if 'usuario' not in session:
+        return redirect('/')
+
+    conn = get_db_connection()
+    cliente = conn.execute('SELECT * FROM clientes WHERE id = ?', (id,)).fetchone()
+    pagos = conn.execute('SELECT fecha, monto FROM pagos WHERE cliente_id = ? ORDER BY fecha DESC', (id,)).fetchall()
+    conn.close()
+
+    return render_template('clientes_de_pagos.html', cliente=cliente, pagos=pagos)
+
 @app.route('/nuevo', methods=['GET', 'POST'])
-def nuevo_cliente():
-    if not session.get('usuario'):
+def nuevo():
+    if 'usuario' not in session:
         return redirect('/')
 
     if request.method == 'POST':
         nombre = request.form['nombre']
-        monto_prestado = float(request.form['monto_prestado'])
-        fecha_inicio = request.form['fecha_inicio']
+        monto = float(request.form['monto'])
+        fecha = request.form['fecha']
         observaciones = request.form['observaciones']
 
-        conn = conectar_db()
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO clientes (nombre, monto_prestado, deuda, fecha_inicio, observaciones) VALUES (?, ?, ?, ?, ?)",
-            (nombre, monto_prestado, monto_prestado, fecha_inicio, observaciones)
-        )
+        conn = get_db_connection()
+        conn.execute('INSERT INTO clientes (nombre, monto, fecha, observaciones) VALUES (?, ?, ?, ?)',
+                     (nombre, monto, fecha, observaciones))
         conn.commit()
         conn.close()
         return redirect('/inicio')
 
     return render_template('nuevo.html')
 
-# Registrar pago
-@app.route('/pago', methods=['POST'])
-def registrar_pago():
-    if not session.get('usuario'):
-        return redirect('/')
-
-    cliente_id = request.form['cliente_id']
-    monto = float(request.form['monto'])
-    comentario = request.form.get('comentario', '')
-
-    conn = conectar_db()
-    cursor = conn.cursor()
-
-    cursor.execute("UPDATE clientes SET deuda = deuda - ? WHERE id = ?", (monto, cliente_id))
-    cursor.execute(
-        "INSERT INTO cobros (cliente_id, monto, comentario, fecha) VALUES (?, ?, ?, ?)",
-        (cliente_id, monto, comentario, datetime.now().strftime('%Y-%m-%d'))
-    )
-
-    conn.commit()
-    conn.close()
-    return redirect('/inicio')
-
-# Ver pagos de cliente (opcional)
-@app.route('/pagos/<int:cliente_id>')
-def ver_pagos(cliente_id):
-    if not session.get('usuario'):
-        return redirect('/')
-
-    conn = conectar_db()
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM clientes WHERE id = ?", (cliente_id,))
-    cliente = cursor.fetchone()
-
-    cursor.execute("SELECT * FROM cobros WHERE cliente_id = ? ORDER BY fecha DESC", (cliente_id,))
-    pagos = cursor.fetchall()
-
-    conn.close()
-    return render_template('clientes_de_pagos.html', cliente=cliente, pagos=pagos)
-
-# ------------------ CREAR TABLAS SI NO EXISTEN ------------------
-
 if __name__ == '__main__':
-    conn = conectar_db()
-    cursor = conn.cursor()
-
-    # Crear tabla 'clientes'
-    cursor.execute('''CREATE TABLE IF NOT EXISTS clientes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT,
-        monto_prestado REAL,
-        deuda REAL,
-        fecha_inicio TEXT,
-        observaciones TEXT
-    )''')
-
-    # Crear tabla 'cobros'
-    cursor.execute('''CREATE TABLE IF NOT EXISTS cobros (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        cliente_id INTEGER,
-        monto REAL,
-        comentario TEXT,
-        fecha TEXT DEFAULT (date('now'))
-    )''')
-
-    conn.commit()
-    conn.close()
-
     app.run(debug=True)
