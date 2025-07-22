@@ -2,27 +2,43 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Historial de Pagos</title>
+    <title>Pagos del Cliente</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px; }
+        h2 { color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+        th { background-color: #eee; }
+        a { text-decoration: none; color: #4CAF50; }
+        a:hover { text-decoration: underline; }
+        .back { margin-top: 20px; display: inline-block; }
+    </style>
 </head>
 <body>
-    <h2>Historial de pagos de {{ cliente.nombre }}</h2>
+    <h2>Pagos realizados por {{ cliente_nombre }}</h2>
 
-    <table border="1" cellpadding="6">
-        <tr>
-            <th>Fecha</th>
-            <th>Monto</th>
-            <th>Comentario</th>
-        </tr>
-        {% for pago in pagos %}
-        <tr>
-            <td>{{ pago['fecha'] }}</td>
-            <td>{{ "{:,.0f}".format(pago['monto']) }}</td>
-            <td>{{ pago['comentario'] }}</td>
-        </tr>
-        {% endfor %}
+    {% if pagos %}
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha del Pago</th>
+                <th>Monto del Pago</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pago in pagos %}
+            <tr>
+                <td>{{ pago['fecha'] }}</td>
+                <td>{{ "{:,.0f}".format(pago['monto']|float).replace(",", ".") }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
     </table>
+    {% else %}
+        <p>No hay pagos registrados para este cliente.</p>
+    {% endif %}
 
     <br>
-    <a href="/inicio">Volver al listado</a>
+    <a class="back" href="{{ url_for('inicio') }}">← Volver al listado</a>
 </body>
 </html>
