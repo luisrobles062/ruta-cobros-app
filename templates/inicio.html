@@ -1,37 +1,82 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Panel de Clientes</title>
+    <meta charset="UTF-8" />
+    <title>Listado de Clientes</title>
     <style>
-        body { font-family: Arial; margin: 20px; background: #f2f2f2; }
-        h2 { color: #333; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #fff; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
-        th { background-color: #4CAF50; color: white; }
-        input[type="number"] { width: 70px; }
-        .filter-container { margin-bottom: 20px; }
-    </style>
-    <script>
-        function filtrarClientes() {
-            const filtro = document.getElementById('filtroNombre').value.toLowerCase();
-            const filas = document.querySelectorAll('#tablaClientes tbody tr');
-            filas.forEach(fila => {
-                const nombre = fila.querySelector('.nombre').innerText.toLowerCase();
-                fila.style.display = nombre.includes(filtro) ? '' : 'none';
-            });
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #fafafa;
         }
-    </script>
+        h1 {
+            text-align: center;
+        }
+        #filtro-nombre {
+            margin-bottom: 15px;
+            width: 300px;
+            padding: 8px;
+            font-size: 16px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+        }
+        th, td {
+            padding: 12px 10px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        th {
+            background-color: #007bff;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f8f8f8;
+        }
+        input[type="number"] {
+            width: 100px;
+            padding: 6px;
+            box-sizing: border-box;
+        }
+        input[type="submit"] {
+            background-color: #28a745;
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        input[type="submit"]:hover {
+            background-color: #218838;
+        }
+        .logout-btn {
+            margin-top: 20px;
+            display: block;
+            width: 150px;
+            padding: 10px;
+            text-align: center;
+            background-color: #dc3545;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: bold;
+            margin-left: auto;
+            margin-right: 0;
+        }
+        .logout-btn:hover {
+            background-color: #c82333;
+        }
+    </style>
 </head>
 <body>
-    <h2>Listado de Clientes</h2>
+    <h1>Listado de Clientes</h1>
 
-    <div class="filter-container">
-        <label for="filtroNombre"><strong>Filtrar por nombre:</strong></label>
-        <input type="text" id="filtroNombre" onkeyup="filtrarClientes()" placeholder="Escribe un nombre...">
-    </div>
+    <label for="filtro-nombre">Filtrar por nombre:</label>
+    <input type="text" id="filtro-nombre" placeholder="Escribe el nombre..." />
 
-    <table id="tablaClientes">
+    <table id="tabla-clientes">
         <thead>
             <tr>
                 <th>Fecha</th>
@@ -45,25 +90,42 @@
         <tbody>
             {% for cliente in clientes %}
             <tr>
-                <td>{{ cliente[3] }}</td> <!-- fecha_inicio -->
-                <td class="nombre">{{ cliente[1] }}</td> <!-- nombre -->
-                <td>${{ "%.2f"|format(cliente[2]) }}</td> <!-- deuda inicial -->
-                <td>${{ "%.2f"|format(cliente[2]) }}</td> <!-- deuda actual (por ahora igual al prestado) -->
-                <td>{{ cliente[4] }}</td> <!-- observaciones -->
+                <td>{{ cliente.fecha_inicio }}</td>
+                <td class="nombre-cliente">{{ cliente.nombre }}</td>
+                <td>{{ cliente.deuda + 0 }}</td>
+                <td>{{ cliente.deuda + 0 }}</td>
+                <td>{{ cliente.observaciones }}</td>
                 <td>
-                    <form action="/registrar_cobro" method="POST">
-                        <input type="hidden" name="cliente_id" value="{{ cliente[0] }}">
-                        <input type="number" name="monto" step="0.01" required>
-                        <input type="text" name="comentario" placeholder="Comentario" required>
-                        <button type="submit">Pagar</button>
+                    <form method="POST" action="/pago">
+                        <input type="hidden" name="cliente_id" value="{{ cliente.id }}" />
+                        <input type="number" name="monto" min="0.01" step="0.01" placeholder="Monto" required />
+                        <input type="submit" value="Registrar" />
                     </form>
                 </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6" style="text-align:center;">No hay clientes registrados.</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 
-    <br>
-    <a href="/logout">Cerrar sesión</a>
+    <a href="/logout" class="logout-btn">Cerrar sesión</a>
+
+    <script>
+        const filtroInput = document.getElementById('filtro-nombre');
+        const tabla = document.getElementById('tabla-clientes').getElementsByTagName('tbody')[0];
+
+        filtroInput.addEventListener('input', function () {
+            const filtro = this.value.toLowerCase();
+            const filas = tabla.getElementsByTagName('tr');
+
+            for (let fila of filas) {
+                const nombre = fila.querySelector('.nombre-cliente').textContent.toLowerCase();
+                fila.style.display = nombre.includes(filtro) ? '' : 'none';
+            }
+        });
+    </script>
 </body>
 </html>
