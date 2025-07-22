@@ -1,38 +1,27 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8" />
-    <title>Nuevo Cliente</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        form { max-width: 400px; }
-        label { display: block; margin-top: 10px; }
-        input, textarea { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; }
-        input[type="submit"] {
-            background-color: #28a745; color: white; border: none; padding: 10px;
-            margin-top: 15px; cursor: pointer; border-radius: 4px;
-        }
-        input[type="submit"]:hover { background-color: #218838; }
-        a { display: inline-block; margin-top: 10px; text-decoration: none; color: #555; }
-    </style>
+    <meta charset="UTF-8">
+    <title>Agregar Nuevo Cliente</title>
 </head>
 <body>
     <h2>Agregar Nuevo Cliente</h2>
     <form method="POST" action="/nuevo">
-        <label for="nombre">Nombre:</label>
-        <input type="text" name="nombre" id="nombre" required>
+        <label>Nombre:</label><br>
+        <input type="text" name="nombre" required><br><br>
 
-        <label for="monto_prestado">Monto Prestado:</label>
-        <input type="number" name="monto_prestado" id="monto_prestado" min="0" step="0.01" required>
+        <label>Monto Prestado:</label><br>
+        <input type="number" name="monto_prestado" step="0.01" required><br><br>
 
-        <label for="fecha_inicio">Fecha de Inicio:</label>
-        <input type="date" name="fecha_inicio" id="fecha_inicio" required>
+        <label>Fecha de Inicio:</label><br>
+        <input type="date" name="fecha_inicio" required><br><br>
 
-        <label for="observaciones">Observaciones:</label>
-        <textarea name="observaciones" id="observaciones"></textarea>
+        <label>Observaciones:</label><br>
+        <textarea name="observaciones" rows="4" cols="40"></textarea><br><br>
 
-        <input type="submit" value="Guardar">
+        <button type="submit">Guardar</button>
     </form>
+    <br>
     <a href="/inicio">Volver al listado</a>
 </body>
 </html>
