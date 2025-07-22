@@ -9,147 +9,136 @@
             margin: 20px;
         }
         h1 {
-            margin-bottom: 15px;
+            margin-bottom: 20px;
         }
-        .header-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-        #filtro-nombre {
-            padding: 8px;
-            width: 250px;
-            font-size: 14px;
-        }
-        .btn-agregar {
-            background-color: #28a745;
-            color: white;
-            padding: 10px 15px;
-            border-radius: 5px;
-            text-decoration: none;
+        label {
             font-weight: bold;
-            transition: background-color 0.3s;
         }
-        .btn-agregar:hover {
-            background-color: #218838;
+        input[type="text"] {
+            padding: 5px;
+            margin-left: 10px;
+            margin-bottom: 15px;
+            width: 300px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
         }
         table {
-            width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
-            font-size: 14px;
+            width: 100%;
+            margin-bottom: 30px;
         }
         th, td {
-            padding: 12px 8px;
             border: 1px solid #ddd;
+            padding: 10px;
             text-align: left;
         }
         th {
-            background-color: #f2f2f2;
+            background-color: #0a78e0;
+            color: white;
         }
-        form {
-            margin: 0;
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
         }
-        input[type="number"] {
-            width: 90px;
-            padding: 5px;
-            font-size: 14px;
-        }
-        input[type="submit"] {
+        .btn-pago {
             padding: 6px 12px;
-            background-color: #007bff;
+            background-color: #28a745;
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 13px;
         }
-        input[type="submit"]:hover {
-            background-color: #0056b3;
+        .btn-pago:hover {
+            background-color: #218838;
         }
-        .no-clientes {
+        .logout {
+            margin-top: 20px;
+        }
+        .section-pagos {
+            margin-top: 40px;
+        }
+        .no-data {
+            color: #777;
             font-style: italic;
-            color: gray;
-            text-align: center;
-        }
-        .logout-link {
-            color: red;
-            font-weight: bold;
-            text-decoration: none;
-            font-size: 14px;
-        }
-        .logout-link:hover {
-            text-decoration: underline;
         }
     </style>
 </head>
 <body>
     <h1>Listado de Clientes</h1>
 
-    <div class="header-bar">
-        <input type="text" id="filtro-nombre" placeholder="Filtrar por nombre..." />
-        <a href="/nuevo" class="btn-agregar">+ Agregar nuevo cliente</a>
+    <form method="GET" action="/inicio">
+        <label for="nombre">Filtrar por nombre:</label>
+        <input type="text" id="nombre" name="nombre" placeholder="Buscar cliente..." value="{{ filtro_nombre }}">
+        <input type="submit" value="Buscar">
+        <a href="/nuevo" style="margin-left: 10px;">Agregar nuevo cliente</a>
+    </form>
+
+    {% if clientes|length == 0 %}
+        <p class="no-data">No hay clientes registrados.</p>
+    {% else %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Nombre</th>
+                    <th>Monto Prestado</th>
+                    <th>Deuda Actual</th>
+                    <th>Observaciones</th>
+                    <th>Registrar Pago</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cliente in clientes %}
+                    <tr>
+                        <td>{{ cliente.fecha_inicio }}</td>
+                        <td>{{ cliente.nombre }}</td>
+                        <td>{{ cliente.deuda | format_currency }}</td>
+                        <td>{{ cliente.deuda | format_currency }}</td>
+                        <td>{{ cliente.observaciones }}</td>
+                        <td>
+                            <form action="/pago" method="POST" style="display:inline;">
+                                <input type="hidden" name="cliente_id" value="{{ cliente.id }}">
+                                <input type="number" name="monto" min="1" placeholder="Monto" required>
+                                <input type="text" name="comentario" placeholder="Comentario (opcional)">
+                                <button type="submit" class="btn-pago">Pagar</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+
+    <div class="section-pagos">
+        <h2>Pagos del cliente</h2>
+
+        {% if pagos|length == 0 and filtro_nombre %}
+            <p class="no-data">No hay pagos registrados para este cliente.</p>
+        {% elif pagos|length > 0 %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fecha Pago</th>
+                        <th>Monto</th>
+                        <th>Comentario</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pago in pagos %}
+                    <tr>
+                        <td>{{ pago.fecha }}</td>
+                        <td>{{ pago.monto | format_currency }}</td>
+                        <td>{{ pago.comentario }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>Use el filtro para buscar un cliente y ver sus pagos.</p>
+        {% endif %}
     </div>
 
-    <table id="tabla-clientes">
-        <thead>
-            <tr>
-                <th>Fecha</th>
-                <th>Nombre</th>
-                <th>Monto Prestado</th>
-                <th>Deuda Actual</th>
-                <th>Observaciones</th>
-                <th>Pago</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% if clientes|length == 0 %}
-            <tr>
-                <td colspan="6" class="no-clientes">No hay clientes registrados.</td>
-            </tr>
-            {% else %}
-                {% for cliente in clientes %}
-                <tr>
-                    <td>{{ cliente.fecha_inicio }}</td>
-                    <td>{{ cliente.nombre }}</td>
-                    <td>{{ "{:,.2f}".format(cliente.deuda) | replace(',', 'X') | replace('.', ',') | replace('X', '.') }}</td>
-                    <td>{{ "{:,.2f}".format(cliente.deuda) | replace(',', 'X') | replace('.', ',') | replace('X', '.') }}</td>
-                    <td>{{ cliente.observaciones }}</td>
-                    <td>
-                        <form action="/pago" method="POST">
-                            <input type="hidden" name="cliente_id" value="{{ cliente.id }}" />
-                            <input type="number" name="monto" min="0" step="0.01" placeholder="Monto a pagar" required />
-                            <input type="submit" value="Registrar Pago" />
-                        </form>
-                    </td>
-                </tr>
-                {% endfor %}
-            {% endif %}
-        </tbody>
-    </table>
-
-    <a href="/logout" class="logout-link">Cerrar sesión</a>
-
-    <script>
-        document.getElementById('filtro-nombre').addEventListener('input', function() {
-            const filtro = this.value.toLowerCase();
-            const filas = document.querySelectorAll('#tabla-clientes tbody tr');
-
-            filas.forEach(fila => {
-                // Ignorar fila de "No hay clientes" para filtro
-                if (fila.classList.contains('no-clientes')) {
-                    fila.style.display = filtro ? 'none' : '';
-                    return;
-                }
-                // Mostrar u ocultar fila segun filtro en contenido de la fila
-                if (fila.textContent.toLowerCase().includes(filtro)) {
-                    fila.style.display = '';
-                } else {
-                    fila.style.display = 'none';
-                }
-            });
-        });
-    </script>
+    <div class="logout">
+        <a href="/logout">Cerrar sesión</a>
+    </div>
 </body>
 </html>
