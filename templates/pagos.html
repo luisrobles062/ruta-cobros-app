@@ -1,47 +1,37 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8" />
-    <title>Pagos de {{ cliente['nombre'] }}</title>
+    <meta charset="UTF-8">
+    <title>Pagos del Cliente</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        table { border-collapse: collapse; width: 100%; margin-top: 15px; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        a.button {
-            background-color: #007bff; color: white; padding: 8px 15px; text-decoration: none; border-radius: 4px;
-        }
-        a.button:hover { background-color: #0056b3; }
+        table, th, td { border: 1px solid black; border-collapse: collapse; padding: 8px; }
     </style>
 </head>
 <body>
-    <h2>Pagos de {{ cliente['nombre'] }}</h2>
-    <p><strong>Monto Prestado:</strong> {{ "{:,.0f}".format(cliente['monto_prestado']) | replace(',', '.') }}</p>
-    <p><strong>Deuda Actual:</strong> {{ "{:,.0f}".format(cliente['deuda']) | replace(',', '.') }}</p>
+    <h2>Pagos del cliente: {{ cliente.nombre }}</h2>
 
-    {% if pagos|length == 0 %}
-        <p>No hay pagos registrados para este cliente.</p>
+    {% if pagos %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Fecha del Pago</th>
+                    <th>Monto Pagado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pago in pagos %}
+                <tr>
+                    <td>{{ pago.fecha }}</td>
+                    <td>{{ "{:,.0f}".format(pago.monto).replace(",", ".") }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     {% else %}
-    <table>
-        <thead>
-            <tr>
-                <th>Fecha</th>
-                <th>Monto Pagado</th>
-                <th>Comentario</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for pago in pagos %}
-            <tr>
-                <td>{{ pago['fecha'] }}</td>
-                <td>{{ "{:,.0f}".format(pago['monto']) | replace(',', '.') }}</td>
-                <td>{{ pago['comentario'] }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+        <p>No hay pagos registrados para este cliente.</p>
     {% endif %}
 
-    <a href="/inicio" class="button">Volver al listado</a>
+    <br>
+    <a href="/inicio">⬅️ Volver al listado</a>
 </body>
 </html>
