@@ -3,44 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <title>Listado de Clientes</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background-color: #f9f9f9; }
+        h2 { color: #333; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+        th { background-color: #eee; }
+        input[type="text"], input[type="number"] { padding: 5px; width: 90%; }
+        button { padding: 5px 10px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }
+        button:hover { background-color: #45a049; }
+        .logout { margin-top: 20px; display: inline-block; }
+    </style>
+    <script>
+        function filtrarClientes() {
+            const filtro = document.getElementById("filtroNombre").value.toLowerCase();
+            const filas = document.querySelectorAll("#tablaClientes tbody tr");
+            filas.forEach(fila => {
+                const nombre = fila.querySelector("td:nth-child(2)").innerText.toLowerCase();
+                fila.style.display = nombre.includes(filtro) ? "" : "none";
+            });
+        }
+    </script>
 </head>
 <body>
     <h2>Listado de Clientes</h2>
-    <form method="get">
-        <label>Filtrar por nombre: </label>
-        <input type="text" name="filtro_nombre" value="{{ filtro_nombre }}">
-        <button type="submit">Filtrar</button>
-    </form>
-    <br>
-    <table border="1">
-        <tr>
-            <th>Fecha</th>
-            <th>Nombre</th>
-            <th>Monto Prestado</th>
-            <th>Deuda Actual</th>
-            <th>Observaciones</th>
-            <th>Pago</th>
-            <th>Historial</th>
-        </tr>
-        {% for cliente in clientes %}
-        <tr>
-            <td>{{ cliente.fecha }}</td>
-            <td>{{ cliente.nombre }}</td>
-            <td>{{ "{:,.0f}".format(cliente.monto_prestado).replace(",", ".") }}</td>
-            <td>{{ "{:,.0f}".format(cliente.deuda_actual).replace(",", ".") }}</td>
-            <td>{{ cliente.observaciones }}</td>
-            <td>
-                <form method="post" action="/registrar_pago/{{ cliente.id }}">
-                    <input type="number" name="pago" step="1000" required>
-                    <input type="text" name="comentario" placeholder="Comentario">
-                    <button type="submit">Registrar</button>
-                </form>
-            </td>
-            <td><a href="/pagos/{{ cliente.id }}">Ver pagos</a></td>
-        </tr>
-        {% endfor %}
+    <label for="filtroNombre">Filtrar por nombre: </label>
+    <input type="text" id="filtroNombre" onkeyup="filtrarClientes()" placeholder="Buscar cliente...">
+
+    {% if clientes %}
+    <table id="tablaClientes">
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Nombre</th>
+                <th>Monto Prestado</th>
+                <th>Deuda Actual</th>
+                <th>Observaciones</th>
+                <th>Pago</th>
+                <th>Pagos</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cliente in clientes %}
+            <tr>
+                <td>{{ cliente['fecha'] }}</td>
+                <td>{{ cliente['nombre'] }}</td>
+                <td>{{ "{:,.0f}".format(cliente['monto_prestado']|float).replace(",", ".") }}</td>
+                <td>{{ "{:,.0f}".format(cliente['deuda_actual']|float).replace(",", ".") }}</td>
+                <td>{{ cliente['observaciones'] or '' }}</td>
+                <td>
+                    <form method="post" action="{{ url_for('registrar_pago', cliente_id=cliente['id']) }}">
+                        <input type="number" name="monto_pago" step="1000" required>
+                        <button type="submit">Registrar</button>
+                    </form>
+                </td>
+                <td>
+                    <form method="get" action="{{ url_for('ver_pagos', cliente_id=cliente['id']) }}">
+                        <button type="submit">Ver pagos</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
     </table>
+    {% else %}
+        <p>No hay clientes registrados.</p>
+    {% endif %}
+
     <br>
-    <a href="/logout">Cerrar sesión</a>
+    <a class="logout" href="{{ url_for('logout') }}">Cerrar sesión</a>
 </body>
 </html>
