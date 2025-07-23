@@ -1,74 +1,76 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8" />
-    <title>Pagos de {{ cliente['nombre'] }}</title>
+    <meta charset="UTF-8">
+    <title>Pagos del cliente</title>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
-        h1, h2 { text-align: center; }
-        table {
-            width: 100%;
+        table, th, td {
+            border: 1px solid black;
             border-collapse: collapse;
-            background: white;
-            margin-top: 20px;
+            padding: 8px;
         }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 10px;
-            text-align: center;
+        .anulado {
+            color: red;
+            text-decoration: line-through;
         }
-        th {
+        .boton-editar, .boton-deshacer {
+            padding: 5px 10px;
+            margin: 2px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+        }
+        .boton-editar {
             background-color: #007bff;
             color: white;
         }
-        a {
-            color: #007bff;
-            text-decoration: none;
-            font-weight: bold;
-        }
-        a:hover { text-decoration: underline; }
-        .back-link {
-            display: block;
-            margin-top: 20px;
-            text-align: center;
-        }
-        .no-payments {
-            text-align: center;
-            margin-top: 30px;
-            font-style: italic;
-            color: #666;
+        .boton-deshacer {
+            background-color: #dc3545;
+            color: white;
         }
     </style>
 </head>
 <body>
-    <h1>Pagos de {{ cliente['nombre'] }}</h1>
-    <h2>Monto Prestado: ${{ "{:,.0f}".format(cliente['monto_prestado']) | replace(',', '.') }}</h2>
+    <h2>Pagos del cliente: {{ cliente['nombre'] }}</h2>
+
+    <p><a href="/inicio">Volver al listado</a></p>
 
     {% if pagos|length == 0 %}
-        <p class="no-payments">No hay pagos registrados para este cliente.</p>
+        <p>No hay pagos registrados para este cliente.</p>
     {% else %}
-        <table>
-            <thead>
-                <tr>
-                    <th>Fecha</th>
-                    <th>Monto</th>
-                    <th>Comentario</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for pago in pagos %}
-                    <tr>
-                        <td>{{ pago['fecha'] }}</td>
-                        <td>${{ "{:,.0f}".format(pago['monto']) | replace(',', '.') }}</td>
-                        <td>{{ pago['comentario'] }}</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Monto</th>
+                <th>Comentario</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pago in pagos %}
+            <tr class="{{ 'anulado' if pago['anulado'] == 1 else '' }}">
+                <td>{{ pago['fecha'] }}</td>
+                <td>{{ "{:,.0f}".format(pago['monto']) }}</td>
+                <td>{{ pago['comentario'] }}</td>
+                <td>{{ 'Anulado' if pago['anulado'] == 1 else 'Activo' }}</td>
+                <td>
+                    {% if pago['anulado'] == 0 %}
+                        <form action="{{ url_for('editar_pago', pago_id=pago['id']) }}" method="get" style="display:inline;">
+                            <button type="submit" class="boton-editar">Editar</button>
+                        </form>
+                        <form action="{{ url_for('deshacer_pago', pago_id=pago['id']) }}" method="post" style="display:inline;" onsubmit="return confirm('¿Seguro que deseas deshacer este pago?');">
+                            <button type="submit" class="boton-deshacer">Deshacer</button>
+                        </form>
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
     {% endif %}
-
-    <div class="back-link">
-        <a href="/inicio">Volver al listado de clientes</a>
-    </div>
 </body>
 </html>
