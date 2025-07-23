@@ -1,115 +1,115 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8" />
+    <meta charset="UTF-8">
     <title>Listado de Clientes</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f9f9f9; }
-        h1 { margin-bottom: 10px; }
-        input[type="text"] {
-            padding: 8px; width: 250px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc;
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        input[type="text"], input[type="number"] {
+            padding: 5px;
+            width: 200px;
         }
         table {
-            border-collapse: collapse; width: 100%; background: white;
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
         }
         th, td {
-            padding: 10px; border: 1px solid #ddd; text-align: left;
+            padding: 8px;
+            border: 1px solid #ccc;
+            text-align: center;
         }
         th {
-            background-color: #007bff; color: white;
+            background-color: #f0f0f0;
         }
-        .btn {
-            background-color: #28a745; color: white; padding: 8px 15px; text-decoration: none; border-radius: 5px;
-            margin-bottom: 15px; display: inline-block;
+        .mora {
+            background-color: #ffe5e5;
         }
-        .btn:hover { background-color: #218838; }
-        .logout {
-            float: right; background-color: #dc3545; padding: 8px 15px; border-radius: 5px; color: white;
-            text-decoration: none;
+        .pagar-btn {
+            padding: 4px 8px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
         }
-        .logout:hover { background-color: #c82333; }
-        .pagos-container {
-            margin-top: 30px;
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        .pagar-btn:hover {
+            background-color: #45a049;
         }
-        .no-data {
-            font-style: italic;
-            color: #666;
+        .alerta {
+            color: red;
+            font-weight: bold;
         }
     </style>
+    <script>
+        function filtrarClientes() {
+            const filtro = document.getElementById('filtroNombre').value.toLowerCase();
+            const filas = document.querySelectorAll('#tablaClientes tbody tr');
+            filas.forEach(fila => {
+                const nombre = fila.querySelector('.nombre').textContent.toLowerCase();
+                fila.style.display = nombre.includes(filtro) ? '' : 'none';
+            });
+        }
+    </script>
 </head>
 <body>
     <h1>Listado de Clientes</h1>
-    <a href="/nuevo" class="btn">Agregar nuevo cliente</a>
-    <a href="/logout" class="logout">Cerrar sesión</a>
-    <form method="GET" action="/inicio">
-        <label for="filtro">Filtrar por nombre:</label>
-        <input type="text" id="filtro" name="filtro" placeholder="Buscar cliente..." value="{{ filtro }}">
-        <input type="submit" value="Filtrar">
-    </form>
+
+    <label for="filtroNombre">Filtrar por nombre:</label>
+    <input type="text" id="filtroNombre" onkeyup="filtrarClientes()" placeholder="Buscar cliente...">
+
+    <a href="/nuevo" style="margin-left: 20px;">➕ Agregar nuevo cliente</a>
 
     {% if clientes %}
-    <table>
-        <thead>
-            <tr>
-                <th>Fecha</th>
-                <th>Nombre</th>
-                <th>Monto Prestado</th>
-                <th>Deuda Actual</th>
-                <th>Observaciones</th>
-                <th>Pago</th>
-            </tr>
-        </thead>
-        <tbody>
-        {% for cliente in clientes %}
-            <tr>
-                <td>{{ cliente.fecha_inicio }}</td>
-                <td>{{ cliente.nombre }}</td>
-                <td>{{ "{:,.0f}".format(cliente.deuda + (pagos | sum(attribute='monto') if pagos else 0)) | replace(',', '.') }}</td>
-                <td>{{ "{:,.0f}".format(cliente.deuda) | replace(',', '.') }}</td>
-                <td>{{ cliente.observaciones }}</td>
-                <td>
-                    <form method="POST" action="/pago" style="display:inline-block;">
-                        <input type="hidden" name="cliente_id" value="{{ cliente.id }}">
-                        <input type="number" name="monto" min="1" required style="width: 80px;">
-                        <input type="submit" value="Registrar Pago">
-                    </form>
-                </td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-        <p class="no-data">No hay clientes registrados.</p>
-    {% endif %}
-
-    <div class="pagos-container">
-        <h2>Pagos del cliente</h2>
-        {% if pagos %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Fecha</th>
-                        <th>Monto</th>
-                        <th>Comentario</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {% for pago in pagos %}
-                    <tr>
-                        <td>{{ pago.fecha }}</td>
-                        <td>{{ "{:,.0f}".format(pago.monto) | replace(',', '.') }}</td>
-                        <td>{{ pago.comentario }}</td>
+        <table id="tablaClientes">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Nombre</th>
+                    <th>Monto Prestado</th>
+                    <th>Deuda Actual</th>
+                    <th>Último Pago</th>
+                    <th>Registrar Pago</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cliente in clientes %}
+                    {% set ultima_fecha = cliente['ultima_fecha_pago'] %}
+                    {% set hoy = fecha_actual %}
+                    {% set dias_mora = (hoy - ultima_fecha).days if ultima_fecha else None %}
+                    <tr {% if dias_mora is not none and dias_mora >= 1 %}class="mora"{% endif %}>
+                        <td>{{ cliente['fecha'] }}</td>
+                        <td class="nombre">{{ cliente['nombre'] }}</td>
+                        <td>${{ "{:,.0f}".format(cliente['monto_prestado']) }}</td>
+                        <td>${{ "{:,.0f}".format(cliente['deuda_actual']) }}</td>
+                        <td>
+                            {% if ultima_fecha %}
+                                {{ ultima_fecha.strftime("%d/%m/%Y") }}
+                                {% if dias_mora >= 1 %}
+                                    <div class="alerta">En mora hace {{ dias_mora }} día(s)</div>
+                                {% endif %}
+                            {% else %}
+                                Sin pagos
+                            {% endif %}
+                        </td>
+                        <td>
+                            <form action="/pago" method="POST">
+                                <input type="hidden" name="cliente_id" value="{{ cliente['id'] }}">
+                                <input type="number" name="monto_pago" min="0" required>
+                                <button type="submit" class="pagar-btn">Pagar</button>
+                            </form>
+                        </td>
                     </tr>
                 {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <p class="no-data">No hay pagos registrados para este cliente.</p>
-        {% endif %}
-    </div>
+            </tbody>
+        </table>
+    {% else %}
+        <p>No hay clientes registrados.</p>
+    {% endif %}
+
+    <br><br>
+    <a href="/logout">Cerrar sesión</a>
 </body>
 </html>
