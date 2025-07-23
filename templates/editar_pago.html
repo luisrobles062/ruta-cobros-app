@@ -1,60 +1,17 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
-    <meta charset="UTF-8">
     <title>Editar Pago</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-        }
-        h2 {
-            color: #333;
-        }
-        label {
-            display: block;
-            margin-top: 15px;
-            font-weight: bold;
-        }
-        input[type="number"],
-        input[type="text"] {
-            width: 300px;
-            padding: 8px;
-            margin-top: 5px;
-            font-size: 16px;
-        }
-        button {
-            margin-top: 20px;
-            padding: 10px 20px;
-            background-color: #28a745;
-            color: white;
-            font-size: 16px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        a {
-            margin-left: 15px;
-            font-size: 16px;
-            color: #007bff;
-            text-decoration: none;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-    </style>
 </head>
 <body>
     <h2>Editar Pago</h2>
-    <form method="POST">
-        <label for="monto">Monto:</label>
-        <input type="number" name="monto" id="monto" step="0.01" min="0" value="{{ pago['monto'] }}" required>
-
-        <label for="comentario">Comentario:</label>
-        <input type="text" name="comentario" id="comentario" value="{{ pago['comentario'] }}">
-
-        <button type="submit">Guardar Cambios</button>
-        <a href="{{ url_for('pagos', cliente_id=pago['cliente_id']) }}">Cancelar</a>
+    <form method="post">
+        Monto anterior: ${{ pago.monto }}<br><br>
+        Nuevo monto: <input type="number" step="0.01" name="nuevo_monto" required><br><br>
+        <input type="submit" value="Actualizar">
     </form>
+    <br>
+    <a href="/eliminar_pago/{{ pago.id }}" onclick="return confirm('¿Eliminar este pago?')">Eliminar pago</a><br>
+    <a href="/pagos">← Volver al historial</a>
 </body>
 </html>
