@@ -2,34 +2,38 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Inicio</title>
+    <title>Clientes</title>
 </head>
 <body>
-    <h2>Bienvenido, {{ session['usuario'] }}</h2>
-    <a href="{{ url_for('logout') }}">Cerrar sesión</a>
-    <h3>Lista de Clientes</h3>
-    <a href="{{ url_for('nuevo_cliente') }}">Agregar Nuevo Cliente</a>
+    <h2>Clientes Registrados</h2>
+    <a href="/logout">Cerrar sesión</a> | <a href="/nuevo">Registrar nuevo cliente</a><br><br>
+
     <table border="1">
-        <thead>
-            <tr>
-                <th>Fecha de Inicio</th>
-                <th>Nombre</th>
-                <th>Monto Prestado</th>
-                <th>Deuda Actual</th>
-                <th>Observaciones</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for cliente in clientes %}
-            <tr>
-                <td>{{ cliente['fecha_inicio'] }}</td>
-                <td>{{ cliente['nombre'] }}</td>
-                <td>{{ cliente['monto_prestado'] }}</td>
-                <td>{{ cliente['deuda_actual'] }}</td>
-                <td>{{ cliente['observaciones'] }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
+        <tr>
+            <th>Fecha</th>
+            <th>Nombre</th>
+            <th>Monto</th>
+            <th>% Rédito</th>
+            <th>Deuda Actual</th>
+            <th>Observaciones</th>
+            <th>Registrar Pago</th>
+        </tr>
+        {% for c in clientes %}
+        <tr>
+            <td>{{ c[1] }}</td>
+            <td>{{ c[2] }}</td>
+            <td>{{ c[3] }}</td>
+            <td>{{ c[4] }}</td>
+            <td>{{ c[5] }}</td>
+            <td>{{ c[6] }}</td>
+            <td>
+                <form method="POST" action="/pago/{{ c[0] }}">
+                    <input type="number" step="0.01" name="monto_pagado" required>
+                    <button type="submit">Registrar</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
     </table>
 </body>
 </html>
