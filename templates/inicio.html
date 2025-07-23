@@ -3,37 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <title>Clientes</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        h1 {
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        table, th, td {
+            border: 1px solid #999;
+        }
+        th, td {
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .acciones {
+            margin-top: 20px;
+        }
+        .acciones a {
+            margin-right: 15px;
+            text-decoration: none;
+            color: #0066cc;
+        }
+        .acciones a:hover {
+            text-decoration: underline;
+        }
+    </style>
 </head>
 <body>
-    <h2>Clientes Registrados</h2>
-    <a href="/logout">Cerrar sesión</a> | <a href="/nuevo">Registrar nuevo cliente</a><br><br>
+    <h1>Lista de Clientes</h1>
 
-    <table border="1">
-        <tr>
-            <th>Fecha</th>
-            <th>Nombre</th>
-            <th>Monto</th>
-            <th>% Rédito</th>
-            <th>Deuda Actual</th>
-            <th>Observaciones</th>
-            <th>Registrar Pago</th>
-        </tr>
-        {% for c in clientes %}
-        <tr>
-            <td>{{ c[1] }}</td>
-            <td>{{ c[2] }}</td>
-            <td>{{ c[3] }}</td>
-            <td>{{ c[4] }}</td>
-            <td>{{ c[5] }}</td>
-            <td>{{ c[6] }}</td>
-            <td>
-                <form method="POST" action="/pago/{{ c[0] }}">
-                    <input type="number" step="0.01" name="monto_pagado" required>
-                    <button type="submit">Registrar</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
+    <div class="acciones">
+        <a href="{{ url_for('nuevo_cliente') }}">➕ Nuevo Cliente</a>
+        <a href="{{ url_for('logout') }}">🔒 Cerrar sesión</a>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha Prestada</th>
+                <th>Nombre</th>
+                <th>Monto</th>
+                <th>Deuda Actual</th>
+                <th>Observaciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cliente in clientes %}
+            <tr>
+                <td>{{ cliente[4] }}</td>
+                <td>{{ cliente[1] }}</td>
+                <td>${{ "%.2f"|format(cliente[2]) }}</td>
+                <td>${{ "%.2f"|format(cliente[3]) }}</td>
+                <td>{{ cliente[5] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
     </table>
 </body>
 </html>
