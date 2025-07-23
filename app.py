@@ -4,63 +4,59 @@ import sqlite3
 app = Flask(__name__)
 app.secret_key = 'clave_secreta'
 
-# Ruta de inicio de sesión
+# Conexión a la base de datos
+def get_db_connection():
+    conn = sqlite3.connect('cobros.db')
+    conn.row_factory = sqlite3.Row
+    return conn
+
+# Ruta de login
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         usuario = request.form['usuario']
-        contraseña = request.form['contraseña']
-        if usuario == 'admin' and contraseña == 'admin':
+        clave = request.form['clave']
+        if usuario == 'admin' and clave == 'admin':
             session['usuario'] = usuario
             return redirect('/inicio')
         else:
-            return render_template('login.html', mensaje='Credenciales incorrectas')
+            return render_template('login.html', error='Credenciales inválidas')
     return render_template('login.html')
 
-# Cerrar sesión
+# Ruta de logout
 @app.route('/logout')
 def logout():
     session.pop('usuario', None)
     return redirect('/')
 
-# Página principal con lista de clientes
+# Página principal con listado de clientes
 @app.route('/inicio')
 def inicio():
     if 'usuario' not in session:
         return redirect('/')
-    
-    conexion = sqlite3.connect('cobros.db')
-    cursor = conexion.cursor()
-    cursor.execute('SELECT id, nombre, monto, deuda_actual, fecha_inicio, Observaciones FROM clientes')
-    clientes = cursor.fetchall()
-    conexion.close()
-
+    conn = get_db_connection()
+    clientes = conn.execute('SELECT * FROM clientes').fetchall()
+    conn.close()
     return render_template('inicio.html', clientes=clientes)
 
-# Registrar nuevo cliente
+# Ruta para mostrar el formulario de nuevo cliente
 @app.route('/nuevo', methods=['GET', 'POST'])
 def nuevo_cliente():
+    if 'usuario' not in session:
+        return redirect('/')
+
     if request.method == 'POST':
-        try:
-            nombre = request.form['nombre']
-            monto = float(request.form['monto'])  # Campo correcto según tu BD
-            fecha_inicio = request.form['fecha_inicio']
-            observaciones = request.form.get('observaciones', '')
-            deuda_actual = monto  # Inicialmente igual al monto
+        nombre = request.form['nombre']
+        monto_prestado = float(request.form['monto_prestado'])
+        fecha_inicio = request.form['fecha_inicio']
+        observaciones = request.form['observaciones']
+        deuda = monto_prestado  # Inicialmente igual
 
-            conexion = sqlite3.connect('cobros.db')
-            cursor = conexion.cursor()
-            cursor.execute('''
-                INSERT INTO clientes (nombre, monto, deuda_actual, fecha_inicio, Observaciones)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (nombre, monto, deuda_actual, fecha_inicio, observaciones))
-            conexion.commit()
-            conexion.close()
-            return redirect(url_for('inicio'))
-        except Exception as e:
-            return f"❌ Error al guardar cliente: {str(e)}"
-    
+        conn = get_db_connection()
+        conn.execute('INSERT INTO clientes (nombre, deuda, fecha_inicio, Observaciones) VALUES (?, ?, ?, ?)',
+                     (nombre, deuda, fecha_inicio, observaciones))
+        conn.commit()
+        conn.close()
+        return redirect('/inicio')
+
     return render_template('nuevo.html')
-
-if __name__ == '__main__':
-    app.run(debug=True)
