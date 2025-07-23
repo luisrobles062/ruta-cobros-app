@@ -3,67 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <title>Clientes</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-        }
-        h1 {
-            color: #333;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        table, th, td {
-            border: 1px solid #999;
-        }
-        th, td {
-            padding: 8px;
-            text-align: center;
-        }
-        th {
-            background-color: #f2f2f2;
-        }
-        .acciones {
-            margin-top: 20px;
-        }
-        .acciones a {
-            margin-right: 15px;
-            text-decoration: none;
-            color: #0066cc;
-        }
-        .acciones a:hover {
-            text-decoration: underline;
-        }
-    </style>
 </head>
 <body>
-    <h1>Lista de Clientes</h1>
-
-    <div class="acciones">
-        <a href="{{ url_for('nuevo_cliente') }}">➕ Nuevo Cliente</a>
-        <a href="{{ url_for('logout') }}">🔒 Cerrar sesión</a>
-    </div>
-
-    <table>
+    <h2>Lista de Clientes</h2>
+    <a href="{{ url_for('nuevo_cliente') }}">Agregar nuevo cliente</a> |
+    <a href="{{ url_for('logout') }}">Cerrar sesión</a>
+    <table border="1">
         <thead>
             <tr>
-                <th>Fecha Prestada</th>
                 <th>Nombre</th>
-                <th>Monto</th>
-                <th>Deuda Actual</th>
+                <th>Deuda</th>
+                <th>Fecha de Inicio</th>
                 <th>Observaciones</th>
             </tr>
         </thead>
         <tbody>
             {% for cliente in clientes %}
             <tr>
-                <td>{{ cliente[4] }}</td>
-                <td>{{ cliente[1] }}</td>
-                <td>${{ "%.2f"|format(cliente[2]) }}</td>
-                <td>${{ "%.2f"|format(cliente[3]) }}</td>
-                <td>{{ cliente[5] }}</td>
+                <td>{{ cliente['nombre'] }}</td>
+                <td>{{ cliente['deuda'] }}</td>
+                <td>{{ cliente['fecha_inicio'] }}</td>
+                <td>{{ cliente['Observaciones'] }}</td>
             </tr>
             {% endfor %}
         </tbody>
