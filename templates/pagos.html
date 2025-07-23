@@ -2,19 +2,103 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Editar Pago</title>
+    <title>Pagos del Cliente</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+        }
+
+        h2 {
+            color: #333;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            border: 1px solid #ccc;
+            padding: 10px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        form {
+            display: inline;
+        }
+
+        .acciones button {
+            margin: 2px;
+            padding: 5px 10px;
+            font-size: 14px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .editar {
+            background-color: #007bff;
+            color: white;
+        }
+
+        .deshacer {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .volver {
+            display: inline-block;
+            margin-top: 20px;
+            text-decoration: none;
+            color: #007bff;
+        }
+
+        .volver:hover {
+            text-decoration: underline;
+        }
+    </style>
 </head>
 <body>
-    <h2>Editar Pago</h2>
-    <form method="POST">
-        <label for="monto">Monto:</label>
-        <input type="number" name="monto" id="monto" step="0.01" min="0" value="{{ pago['monto'] }}" required>
-        <br><br>
-        <label for="comentario">Comentario:</label>
-        <input type="text" name="comentario" id="comentario" value="{{ pago['comentario'] }}">
-        <br><br>
-        <button type="submit">Guardar Cambios</button>
-        <a href="{{ url_for('pagos', cliente_id=pago['cliente_id']) }}">Cancelar</a>
-    </form>
+    <h2>Pagos de {{ cliente['nombre'] }}</h2>
+
+    {% if pagos %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Monto</th>
+                    <th>Comentario</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pago in pagos %}
+                    <tr>
+                        <td>{{ pago['fecha'] }}</td>
+                        <td>${{ '%.2f'|format(pago['monto']) }}</td>
+                        <td>{{ pago['comentario'] or '' }}</td>
+                        <td class="acciones">
+                            <a href="{{ url_for('editar_pago', pago_id=pago['id']) }}">
+                                <button class="editar">Editar</button>
+                            </a>
+                            <form method="POST" action="{{ url_for('deshacer_pago', pago_id=pago['id']) }}" onsubmit="return confirm('¿Estás seguro de deshacer este pago?');">
+                                <button class="deshacer">Deshacer</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No hay pagos registrados para este cliente.</p>
+    {% endif %}
+
+    <a class="volver" href="{{ url_for('inicio') }}">← Volver al listado</a>
 </body>
 </html>
