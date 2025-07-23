@@ -1,41 +1,43 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
+    <meta charset="UTF-8" />
     <title>Clientes</title>
 </head>
 <body>
-    <h2>Clientes</h2>
-    <form method="get">
-        Buscar cliente: <input type="text" name="filtro" value="{{ filtro }}">
-        <input type="submit" value="Filtrar">
+    <h1>Listado de Clientes</h1>
+
+    <form method="get" action="/inicio">
+        <input type="text" name="filtro" placeholder="Filtrar por nombre" value="{{ filtro }}">
+        <button type="submit">Buscar</button>
+        <a href="/inicio">Limpiar filtro</a>
     </form>
-    <table border="1">
-        <tr>
-            <th>Fecha</th>
-            <th>Nombre</th>
-            <th>Monto Prestado</th>
-            <th>Deuda Actual</th>
-            <th>Pago</th>
-        </tr>
-        {% for c in clientes %}
-        <tr>
-            <td>{{ c.fecha }}</td>
-            <td>{{ c.nombre }}</td>
-            <td>${{ '%.2f'|format(c.monto_prestado) }}</td>
-            <td>${{ '%.2f'|format(c.deuda_actual) }}</td>
-            <td>
-                <form method="post">
-                    <input type="hidden" name="cliente_id" value="{{ c.id }}">
-                    <input type="number" name="pago" step="0.01" required>
-                    <input type="submit" value="Pagar">
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
+
+    <table border="1" cellpadding="5" cellspacing="0">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Fecha Prestada</th>
+                <th>Monto Prestado</th>
+                <th>Porcentaje</th>
+                <th>Deuda Actual</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cliente in clientes %}
+            <tr>
+                <td>{{ cliente['id'] }}</td>
+                <td>{{ cliente['nombre'] }}</td>
+                <td>{{ cliente['fecha'] }}</td>
+                <td>{{ cliente['monto_prestado'] }}</td>
+                <td>{{ cliente['porcentaje'] }}</td>
+                <td>{{ cliente['deuda_actual'] }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6">No se encontraron clientes.</td></tr>
+            {% endfor %}
+        </tbody>
     </table>
-    <br>
-    <a href="/nuevo">Registrar nuevo cliente</a> | 
-    <a href="/pagos">Ver historial de pagos</a> | 
-    <a href="/logout">Cerrar sesión</a>
 </body>
 </html>
