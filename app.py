@@ -219,3 +219,77 @@ if __name__ == '__main__':
     conn.close()
 
     app.run(debug=True)
+    # Ruta: Ver pagos de un cliente
+@app.route('/pagos/<int:cliente_id>')
+def pagos(cliente_id):
+    if 'usuario' not in session:
+        return redirect('/')
+    
+    conn = sqlite3.connect('cobros.db')
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM clientes WHERE id = ?", (cliente_id,))
+    cliente = cursor.fetchone()
+
+    cursor.execute("SELECT * FROM pagos WHERE cliente_id = ? ORDER BY fecha DESC", (cliente_id,))
+    pagos = cursor.fetchall()
+
+    conn.close()
+    return render_template('pagos.html', cliente=cliente, pagos=pagos)
+
+# Ruta: Editar pago
+@app.route('/editar_pago/<int:pago_id>', methods=['GET', 'POST'])
+def editar_pago(pago_id):
+    if 'usuario' not in session:
+        return redirect('/')
+
+    conn = sqlite3.connect('cobros.db')
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM pagos WHERE id = ?", (pago_id,))
+    pago = cursor.fetchone()
+
+    if request.method == 'POST':
+        nuevo_monto = float(request.form['monto'])
+        comentario = request.form.get('comentario', '')
+        diferencia = nuevo_monto - pago['monto']
+
+        # Actualiza el pago
+        cursor.execute("UPDATE pagos SET monto = ?, comentario = ? WHERE id = ?", (nuevo_monto, comentario, pago_id))
+        
+        # Actualiza la deuda del cliente
+        cursor.execute("UPDATE clientes SET deuda_actual = deuda_actual - ? WHERE id = ?", (diferencia, pago['cliente_id']))
+        
+        conn.commit()
+        conn.close()
+        return redirect(url_for('pagos', cliente_id=pago['cliente_id']))
+
+    conn.close()
+    return render_template('editar_pago.html', pago=pago)
+
+# Ruta: Deshacer pago
+@app.route('/deshacer_pago/<int:pago_id>', methods=['POST'])
+def deshacer_pago(pago_id):
+    if 'usuario' not in session:
+        return redirect('/')
+
+    conn = sqlite3.connect('cobros.db')
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    # Obtener info del pago
+    cursor.execute("SELECT * FROM pagos WHERE id = ?", (pago_id,))
+    pago = cursor.fetchone()
+
+    if pago:
+        # Revertir deuda
+        cursor.execute("UPDATE clientes SET deuda_actual = deuda_actual + ? WHERE id = ?", (pago['monto'], pago['cliente_id']))
+        # Borrar el pago
+        cursor.execute("DELETE FROM pagos WHERE id = ?", (pago_id,))
+        conn.commit()
+
+    conn.close()
+    return redirect(url_for('pagos', cliente_id=pago['cliente_id']))
+
