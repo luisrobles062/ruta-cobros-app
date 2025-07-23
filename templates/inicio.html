@@ -1,134 +1,41 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Panel de Clientes</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f5f5f5;
-            margin: 0;
-            padding: 0;
-        }
-        header {
-            background-color: #2c3e50;
-            color: white;
-            padding: 10px 20px;
-            text-align: center;
-        }
-        .container {
-            padding: 20px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            border: 1px solid #ccc;
-            padding: 8px;
-            text-align: center;
-        }
-        th {
-            background-color: #34495e;
-            color: white;
-        }
-        tr:nth-child(even) {
-            background-color: #ecf0f1;
-        }
-        input[type="number"] {
-            width: 80px;
-        }
-        .filter {
-            margin-bottom: 10px;
-        }
-        .acciones {
-            display: flex;
-            gap: 5px;
-            justify-content: center;
-        }
-        .acciones form {
-            display: inline;
-        }
-        button, a.button-link {
-            padding: 4px 8px;
-            font-size: 0.9em;
-            background-color: #3498db;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            text-decoration: none;
-            cursor: pointer;
-        }
-        button:hover, a.button-link:hover {
-            background-color: #2980b9;
-        }
-    </style>
+    <title>Clientes</title>
 </head>
 <body>
-    <header>
-        <h1>Listado de Clientes</h1>
-        <a class="button-link" href="{{ url_for('nuevo') }}">Registrar Nuevo Cliente</a>
-        <a class="button-link" href="{{ url_for('logout') }}">Cerrar Sesión</a>
-    </header>
-    <div class="container">
-        <div class="filter">
-            <label for="filtro">Filtrar por nombre:</label>
-            <input type="text" id="filtro" onkeyup="filtrarTabla()">
-        </div>
-        <table id="tablaClientes">
-            <thead>
-                <tr>
-                    <th>Fecha</th>
-                    <th>Nombre</th>
-                    <th>Monto Prestado</th>
-                    <th>Deuda Actual</th>
-                    <th>Observaciones</th>
-                    <th>Nuevo Pago</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for cliente in clientes %}
-                <tr>
-                    <td>{{ cliente['fecha'] }}</td>
-                    <td>{{ cliente['nombre'] }}</td>
-                    <td>${{ '{:.2f}'.format(cliente['monto']) }}</td>
-                    <td>${{ '{:.2f}'.format(cliente['deuda']) }}</td>
-                    <td>{{ cliente['observaciones'] }}</td>
-                    <td>
-                        <form method="POST" action="{{ url_for('pagar', cliente_id=cliente['id']) }}">
-                            <input type="number" name="monto" step="0.01" min="0" required>
-                            <input type="text" name="comentario" placeholder="Comentario">
-                            <button type="submit">Pagar</button>
-                        </form>
-                    </td>
-                    <td class="acciones">
-                        <a class="button-link" href="{{ url_for('pagos', cliente_id=cliente['id']) }}">Ver Pagos</a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    <script>
-        function filtrarTabla() {
-            let input = document.getElementById("filtro");
-            let filtro = input.value.toLowerCase();
-            let tabla = document.getElementById("tablaClientes");
-            let filas = tabla.getElementsByTagName("tr");
-            for (let i = 1; i < filas.length; i++) {
-                let celdas = filas[i].getElementsByTagName("td");
-                let mostrar = false;
-                for (let j = 0; j < celdas.length; j++) {
-                    if (celdas[j].innerText.toLowerCase().includes(filtro)) {
-                        mostrar = true;
-                        break;
-                    }
-                }
-                filas[i].style.display = mostrar ? "" : "none";
-            }
-        }
-    </script>
+    <h2>Clientes</h2>
+    <form method="get">
+        Buscar cliente: <input type="text" name="filtro" value="{{ filtro }}">
+        <input type="submit" value="Filtrar">
+    </form>
+    <table border="1">
+        <tr>
+            <th>Fecha</th>
+            <th>Nombre</th>
+            <th>Monto Prestado</th>
+            <th>Deuda Actual</th>
+            <th>Pago</th>
+        </tr>
+        {% for c in clientes %}
+        <tr>
+            <td>{{ c.fecha }}</td>
+            <td>{{ c.nombre }}</td>
+            <td>${{ '%.2f'|format(c.monto_prestado) }}</td>
+            <td>${{ '%.2f'|format(c.deuda_actual) }}</td>
+            <td>
+                <form method="post">
+                    <input type="hidden" name="cliente_id" value="{{ c.id }}">
+                    <input type="number" name="pago" step="0.01" required>
+                    <input type="submit" value="Pagar">
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    <br>
+    <a href="/nuevo">Registrar nuevo cliente</a> | 
+    <a href="/pagos">Ver historial de pagos</a> | 
+    <a href="/logout">Cerrar sesión</a>
 </body>
 </html>
