@@ -1,26 +1,20 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Agregar Nuevo Cliente</title>
+    <title>Registrar Cliente</title>
 </head>
 <body>
-    <h2>Agregar Nuevo Cliente</h2>
-    <form method="POST" action="{{ url_for('nuevo_cliente') }}">
-        <label for="nombre">Nombre:</label>
-        <input type="text" id="nombre" name="nombre" required><br><br>
-
-        <label for="monto_prestado">Monto Prestado:</label>
-        <input type="number" id="monto_prestado" name="monto_prestado" step="0.01" min="0" required><br><br>
-
-        <label for="fecha_inicio">Fecha de Inicio:</label>
-        <input type="date" id="fecha_inicio" name="fecha_inicio" required><br><br>
-
-        <label for="observaciones">Observaciones:</label>
-        <textarea id="observaciones" name="observaciones"></textarea><br><br>
-
-        <button type="submit">Guardar Cliente</button>
-        <a href="{{ url_for('inicio') }}">Volver al listado</a>
+    <h2>Registrar Nuevo Cliente</h2>
+    <form method="post">
+        Fecha: <input type="date" name="fecha" required><br>
+        Nombre: <input type="text" name="nombre" required><br>
+        Monto prestado: <input type="number" name="monto" step="0.01" required><br>
+        % Rendimiento: <input type="number" name="porcentaje" step="0.01" required><br>
+        Deuda inicial: <input type="number" name="deuda" step="0.01" required><br>
+        Observaciones: <input type="text" name="observaciones"><br>
+        <input type="submit" value="Guardar">
     </form>
+    <br>
+    <a href="/inicio">← Volver al inicio</a>
 </body>
 </html>
