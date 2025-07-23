@@ -2,75 +2,19 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Pagos del cliente</title>
-    <style>
-        table, th, td {
-            border: 1px solid black;
-            border-collapse: collapse;
-            padding: 8px;
-        }
-        .anulado {
-            color: red;
-            text-decoration: line-through;
-        }
-        .boton-editar, .boton-deshacer {
-            padding: 5px 10px;
-            margin: 2px;
-            cursor: pointer;
-            border: none;
-            border-radius: 4px;
-        }
-        .boton-editar {
-            background-color: #007bff;
-            color: white;
-        }
-        .boton-deshacer {
-            background-color: #dc3545;
-            color: white;
-        }
-    </style>
+    <title>Editar Pago</title>
 </head>
 <body>
-    <h2>Pagos del cliente: {{ cliente['nombre'] }}</h2>
-
-    <p><a href="/inicio">Volver al listado</a></p>
-
-    {% if pagos|length == 0 %}
-        <p>No hay pagos registrados para este cliente.</p>
-    {% else %}
-    <table>
-        <thead>
-            <tr>
-                <th>Fecha</th>
-                <th>Monto</th>
-                <th>Comentario</th>
-                <th>Estado</th>
-                <th>Acciones</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for pago in pagos %}
-            <tr class="{{ 'anulado' if pago['anulado'] == 1 else '' }}">
-                <td>{{ pago['fecha'] }}</td>
-                <td>{{ "{:,.0f}".format(pago['monto']) }}</td>
-                <td>{{ pago['comentario'] }}</td>
-                <td>{{ 'Anulado' if pago['anulado'] == 1 else 'Activo' }}</td>
-                <td>
-                    {% if pago['anulado'] == 0 %}
-                        <form action="{{ url_for('editar_pago', pago_id=pago['id']) }}" method="get" style="display:inline;">
-                            <button type="submit" class="boton-editar">Editar</button>
-                        </form>
-                        <form action="{{ url_for('deshacer_pago', pago_id=pago['id']) }}" method="post" style="display:inline;" onsubmit="return confirm('¿Seguro que deseas deshacer este pago?');">
-                            <button type="submit" class="boton-deshacer">Deshacer</button>
-                        </form>
-                    {% else %}
-                        -
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% endif %}
+    <h2>Editar Pago</h2>
+    <form method="POST">
+        <label for="monto">Monto:</label>
+        <input type="number" name="monto" id="monto" step="0.01" min="0" value="{{ pago['monto'] }}" required>
+        <br><br>
+        <label for="comentario">Comentario:</label>
+        <input type="text" name="comentario" id="comentario" value="{{ pago['comentario'] }}">
+        <br><br>
+        <button type="submit">Guardar Cambios</button>
+        <a href="{{ url_for('pagos', cliente_id=pago['cliente_id']) }}">Cancelar</a>
+    </form>
 </body>
 </html>
