@@ -4,105 +4,112 @@
     <meta charset="UTF-8" />
     <title>Listado de Clientes</title>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
-        h1 { text-align: center; }
-        .filtro-container {
-            margin-bottom: 15px;
-            text-align: center;
-        }
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f9f9f9; }
+        h1 { margin-bottom: 10px; }
         input[type="text"] {
-            padding: 7px;
-            width: 250px;
-            border-radius: 4px;
-            border: 1px solid #ccc;
+            padding: 8px; width: 250px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc;
         }
-        button {
-            padding: 7px 14px;
-            margin-left: 10px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        button:hover { background-color: #0056b3; }
         table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-            background: white;
+            border-collapse: collapse; width: 100%; background: white;
         }
         th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: center;
+            padding: 10px; border: 1px solid #ddd; text-align: left;
         }
         th {
-            background-color: #007bff;
-            color: white;
+            background-color: #007bff; color: white;
         }
-        a {
-            color: #007bff;
+        .btn {
+            background-color: #28a745; color: white; padding: 8px 15px; text-decoration: none; border-radius: 5px;
+            margin-bottom: 15px; display: inline-block;
+        }
+        .btn:hover { background-color: #218838; }
+        .logout {
+            float: right; background-color: #dc3545; padding: 8px 15px; border-radius: 5px; color: white;
             text-decoration: none;
         }
-        a:hover { text-decoration: underline; }
-        .top-actions {
-            margin-bottom: 20px;
-            text-align: center;
+        .logout:hover { background-color: #c82333; }
+        .pagos-container {
+            margin-top: 30px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
-        .logout {
-            margin-top: 20px;
-            text-align: center;
+        .no-data {
+            font-style: italic;
+            color: #666;
         }
     </style>
 </head>
 <body>
     <h1>Listado de Clientes</h1>
+    <a href="/nuevo" class="btn">Agregar nuevo cliente</a>
+    <a href="/logout" class="logout">Cerrar sesión</a>
+    <form method="GET" action="/inicio">
+        <label for="filtro">Filtrar por nombre:</label>
+        <input type="text" id="filtro" name="filtro" placeholder="Buscar cliente..." value="{{ filtro }}">
+        <input type="submit" value="Filtrar">
+    </form>
 
-    <div class="top-actions">
-        <form method="GET" action="/inicio" style="display:inline-block;">
-            <input
-                type="text"
-                name="filtro"
-                placeholder="Buscar cliente..."
-                value="{{ filtro | default('') }}"
-            />
-            <button type="submit">Filtrar</button>
-        </form>
-        <a href="/nuevo" style="margin-left:20px; font-weight:bold;">Agregar nuevo cliente</a>
-    </div>
-
-    {% if clientes|length == 0 %}
-        <p style="text-align:center;">No hay clientes registrados.</p>
+    {% if clientes %}
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Nombre</th>
+                <th>Monto Prestado</th>
+                <th>Deuda Actual</th>
+                <th>Observaciones</th>
+                <th>Pago</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for cliente in clientes %}
+            <tr>
+                <td>{{ cliente.fecha_inicio }}</td>
+                <td>{{ cliente.nombre }}</td>
+                <td>{{ "{:,.0f}".format(cliente.deuda + (pagos | sum(attribute='monto') if pagos else 0)) | replace(',', '.') }}</td>
+                <td>{{ "{:,.0f}".format(cliente.deuda) | replace(',', '.') }}</td>
+                <td>{{ cliente.observaciones }}</td>
+                <td>
+                    <form method="POST" action="/pago" style="display:inline-block;">
+                        <input type="hidden" name="cliente_id" value="{{ cliente.id }}">
+                        <input type="number" name="monto" min="1" required style="width: 80px;">
+                        <input type="submit" value="Registrar Pago">
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
     {% else %}
-        <table>
-            <thead>
-                <tr>
-                    <th>Fecha Inicio</th>
-                    <th>Nombre</th>
-                    <th>Monto Prestado</th>
-                    <th>Deuda Actual</th>
-                    <th>Observaciones</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for cliente in clientes %}
-                    <tr>
-                        <td>{{ cliente['fecha_inicio'] }}</td>
-                        <td>{{ cliente['nombre'] }}</td>
-                        <td>${{ "{:,.0f}".format(cliente['monto_prestado']) | replace(',', '.') }}</td>
-                        <td>${{ "{:,.0f}".format(cliente['deuda']) | replace(',', '.') }}</td>
-                        <td>{{ cliente['observaciones'] }}</td>
-                        <td><a href="/pagos/{{ cliente['id'] }}">Ver pagos</a></td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <p class="no-data">No hay clientes registrados.</p>
     {% endif %}
 
-    <div class="logout">
-        <a href="/logout">Cerrar sesión</a>
+    <div class="pagos-container">
+        <h2>Pagos del cliente</h2>
+        {% if pagos %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Monto</th>
+                        <th>Comentario</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for pago in pagos %}
+                    <tr>
+                        <td>{{ pago.fecha }}</td>
+                        <td>{{ "{:,.0f}".format(pago.monto) | replace(',', '.') }}</td>
+                        <td>{{ pago.comentario }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p class="no-data">No hay pagos registrados para este cliente.</p>
+        {% endif %}
     </div>
 </body>
 </html>
