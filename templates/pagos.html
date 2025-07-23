@@ -1,104 +1,36 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Pagos del Cliente</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-        }
-
-        h2 {
-            color: #333;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-
-        th, td {
-            border: 1px solid #ccc;
-            padding: 10px;
-            text-align: center;
-        }
-
-        th {
-            background-color: #f2f2f2;
-        }
-
-        form {
-            display: inline;
-        }
-
-        .acciones button {
-            margin: 2px;
-            padding: 5px 10px;
-            font-size: 14px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        .editar {
-            background-color: #007bff;
-            color: white;
-        }
-
-        .deshacer {
-            background-color: #dc3545;
-            color: white;
-        }
-
-        .volver {
-            display: inline-block;
-            margin-top: 20px;
-            text-decoration: none;
-            color: #007bff;
-        }
-
-        .volver:hover {
-            text-decoration: underline;
-        }
-    </style>
+    <title>Historial de Pagos</title>
 </head>
 <body>
-    <h2>Pagos de {{ cliente['nombre'] }}</h2>
+    <h2>Historial de Pagos</h2>
 
-    {% if pagos %}
-        <table>
-            <thead>
-                <tr>
-                    <th>Fecha</th>
-                    <th>Monto</th>
-                    <th>Comentario</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for pago in pagos %}
-                    <tr>
-                        <td>{{ pago['fecha'] }}</td>
-                        <td>${{ '%.2f'|format(pago['monto']) }}</td>
-                        <td>{{ pago['comentario'] or '' }}</td>
-                        <td class="acciones">
-                            <a href="{{ url_for('editar_pago', pago_id=pago['id']) }}">
-                                <button class="editar">Editar</button>
-                            </a>
-                            <form method="POST" action="{{ url_for('deshacer_pago', pago_id=pago['id']) }}" onsubmit="return confirm('¿Estás seguro de deshacer este pago?');">
-                                <button class="deshacer">Deshacer</button>
-                            </form>
-                        </td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    {% else %}
-        <p>No hay pagos registrados para este cliente.</p>
-    {% endif %}
+    <table border="1">
+        <thead>
+            <tr>
+                <th>Cliente</th>
+                <th>Monto Pagado</th>
+                <th>Fecha</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in pagos %}
+            <tr>
+                <td>{{ p.nombre }}</td>
+                <td>${{ '%.2f'|format(p.monto) }}</td>
+                <td>{{ p.fecha }}</td>
+                <td>
+                    <a href="/editar_pago/{{ p.id }}">Editar</a> |
+                    <a href="/eliminar_pago/{{ p.id }}" onclick="return confirm('¿Eliminar este pago?')">Eliminar</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 
-    <a class="volver" href="{{ url_for('inicio') }}">← Volver al listado</a>
+    <br>
+    <a href="/inicio">← Volver al inicio</a>
 </body>
 </html>
