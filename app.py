@@ -14,8 +14,8 @@ def obtener_conexion():
 def login():
     if request.method == 'POST':
         usuario = request.form['usuario']
-        contraseña = request.form['contraseña']
-        if usuario == 'admin' and contraseña == 'admin':
+        clave = request.form['clave']  # Aquí corregido para que coincida con el name="clave" en el HTML
+        if usuario == 'admin' and clave == 'admin':
             session['usuario'] = usuario
             return redirect('/inicio')
         else:
