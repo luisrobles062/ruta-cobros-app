@@ -1,82 +1,119 @@
-from flask import Flask, render_template, request, session, redirect, url_for
+from flask import Flask, render_template, request, redirect, session, url_for, flash
 import sqlite3
+import os
 
 app = Flask(__name__)
-app.secret_key = 'tu_clave_secreta'  # Cambia esto por algo seguro
+app.secret_key = 'clave_secreta'
 
-def get_db_connection():
-    conn = sqlite3.connect('cobros.db')
-    conn.row_factory = sqlite3.Row
-    return conn
+DB_PATH = 'cobros.db'
+
+def obtener_conexion():
+    return sqlite3.connect(DB_PATH)
 
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         usuario = request.form['usuario']
-        clave = request.form['clave']
-        if usuario == 'admin' and clave == 'admin':
+        contraseña = request.form['contraseña']
+        if usuario == 'admin' and contraseña == 'admin':
             session['usuario'] = usuario
-            return redirect(url_for('inicio'))
+            return redirect('/inicio')
         else:
-            return render_template('login.html', error='Usuario o clave incorrecta')
+            flash('Credenciales incorrectas', 'error')
     return render_template('login.html')
 
-@app.route('/inicio')
+@app.route('/logout')
+def logout():
+    session.pop('usuario', None)
+    return redirect('/')
+
+@app.route('/inicio', methods=['GET', 'POST'])
 def inicio():
     if 'usuario' not in session:
-        return redirect(url_for('login'))
+        return redirect('/')
 
-    filtro = request.args.get('filtro', '').strip()
-    conn = get_db_connection()
+    conn = obtener_conexion()
     cursor = conn.cursor()
 
+    filtro = request.args.get('filtro', '')
+
     if filtro:
-        cursor.execute("SELECT * FROM clientes WHERE nombre LIKE ?", ('%' + filtro + '%',))
+        cursor.execute("""
+            SELECT * FROM clientes
+            WHERE nombre LIKE ?
+            ORDER BY fecha DESC
+        """, ('%' + filtro + '%',))
     else:
-        cursor.execute("SELECT * FROM clientes")
+        cursor.execute("SELECT * FROM clientes ORDER BY fecha DESC")
 
     clientes = cursor.fetchall()
-    conn.close()
 
+    if request.method == 'POST':
+        cliente_id = request.form['cliente_id']
+        pago = float(request.form['pago'])
+
+        # Registrar pago
+        cursor.execute("INSERT INTO pagos (cliente_id, monto_pagado, fecha_pago) VALUES (?, ?, DATE('now'))",
+                       (cliente_id, pago))
+        
+        # Actualizar deuda
+        cursor.execute("UPDATE clientes SET deuda_actual = deuda_actual - ? WHERE id = ?",
+                       (pago, cliente_id))
+        conn.commit()
+        
+        return redirect('/inicio')
+
+    conn.close()
     return render_template('inicio.html', clientes=clientes, filtro=filtro)
 
 @app.route('/nuevo', methods=['GET', 'POST'])
 def nuevo():
     if 'usuario' not in session:
-        return redirect(url_for('login'))
+        return redirect('/')
 
     if request.method == 'POST':
-        nombre = request.form['nombre'].strip()
-        fecha = request.form['fecha'].strip()
-        monto = request.form['monto'].strip()
-        deuda = request.form['deuda'].strip()
-
-        if not nombre or not monto or not deuda:
-            error = "Por favor completa los campos obligatorios (nombre, monto, deuda)."
-            return render_template('nuevo.html', error=error, nombre=nombre, fecha=fecha, monto=monto, deuda=deuda)
+        fecha = request.form['fecha']
+        nombre = request.form['nombre']
+        monto = request.form['monto']
+        porcentaje = request.form['porcentaje']
+        observaciones = request.form['observaciones']
 
         try:
-            monto_val = float(monto)
-            deuda_val = float(deuda)
+            monto = float(monto)
+            porcentaje = float(porcentaje)
+            deuda = monto + (monto * (porcentaje / 100))
         except ValueError:
-            error = "Monto y deuda deben ser números válidos."
-            return render_template('nuevo.html', error=error, nombre=nombre, fecha=fecha, monto=monto, deuda=deuda)
+            flash('Monto o porcentaje inválido', 'error')
+            return redirect('/nuevo')
 
-        conn = get_db_connection()
+        conn = obtener_conexion()
         cursor = conn.cursor()
-        cursor.execute('INSERT INTO clientes (nombre, fecha, monto, deuda) VALUES (?, ?, ?, ?)',
-                       (nombre, fecha, monto_val, deuda_val))
+        cursor.execute("""
+            INSERT INTO clientes (fecha, nombre, monto_prestado, porcentaje, deuda_actual, observaciones)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (fecha, nombre, monto, porcentaje, deuda, observaciones))
         conn.commit()
         conn.close()
-
-        return redirect(url_for('inicio'))
+        return redirect('/inicio')
 
     return render_template('nuevo.html')
 
-@app.route('/logout')
-def logout():
-    session.pop('usuario', None)
-    return redirect(url_for('login'))
+@app.route('/pagos')
+def pagos():
+    if 'usuario' not in session:
+        return redirect('/')
+
+    conn = obtener_conexion()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT pagos.id, clientes.nombre, pagos.monto_pagado, pagos.fecha_pago
+        FROM pagos
+        JOIN clientes ON pagos.cliente_id = clientes.id
+        ORDER BY pagos.fecha_pago DESC
+    """)
+    pagos = cursor.fetchall()
+    conn.close()
+    return render_template('pagos.html', pagos=pagos)
 
 if __name__ == '__main__':
     app.run(debug=True)
