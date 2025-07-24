@@ -2,30 +2,62 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8" />
-    <title>Agregar Nuevo Cliente</title>
+    <title>Nuevo Cliente - Solo Ricuras</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        body {
+            background-color: #f7f9fc;
+            padding: 30px;
+        }
+        .form-container {
+            max-width: 600px;
+            margin: auto;
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+        }
+        .btn-submit {
+            background-color: #4a90e2;
+            border: none;
+        }
+        .btn-submit:hover {
+            background-color: #357ABD;
+        }
+    </style>
 </head>
 <body>
-    <h2>Agregar Nuevo Cliente</h2>
-    <a href="{{ url_for('inicio') }}">Volver a la lista</a>
+    <div class="form-container">
+        <h2 class="mb-4 text-center">Agregar Nuevo Cliente</h2>
 
-    {% if error %}
-        <p style="color:red;">{{ error }}</p>
-    {% endif %}
+        {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
 
-    <form method="POST">
-        <label>Nombre*: </label><br/>
-        <input type="text" name="nombre" value="{{ nombre or '' }}" required /><br/>
+        <form method="post" action="{{ url_for('nuevo') }}">
+            <div class="mb-3">
+                <label for="nombre" class="form-label">Nombre *</label>
+                <input type="text" id="nombre" name="nombre" class="form-control" value="{{ nombre or '' }}" required />
+            </div>
 
-        <label>Fecha: </label><br/>
-        <input type="date" name="fecha" value="{{ fecha or '' }}" /><br/>
+            <div class="mb-3">
+                <label for="fecha" class="form-label">Fecha</label>
+                <input type="date" id="fecha" name="fecha" class="form-control" value="{{ fecha or '' }}" />
+            </div>
 
-        <label>Monto*: </label><br/>
-        <input type="number" step="0.01" name="monto" value="{{ monto or '' }}" required /><br/>
+            <div class="mb-3">
+                <label for="monto" class="form-label">Monto *</label>
+                <input type="number" step="0.01" id="monto" name="monto" class="form-control" value="{{ monto or '' }}" required />
+            </div>
 
-        <label>Deuda*: </label><br/>
-        <input type="number" step="0.01" name="deuda" value="{{ deuda or '' }}" required /><br/><br/>
+            <div class="mb-3">
+                <label for="deuda" class="form-label">Deuda *</label>
+                <input type="number" step="0.01" id="deuda" name="deuda" class="form-control" value="{{ deuda or '' }}" required />
+            </div>
 
-        <button type="submit">Agregar Cliente</button>
-    </form>
+            <button type="submit" class="btn btn-submit text-white w-100">Guardar Cliente</button>
+            <a href="{{ url_for('inicio') }}" class="btn btn-link mt-3 d-block text-center">Volver al inicio</a>
+        </form>
+    </div>
 </body>
 </html>
