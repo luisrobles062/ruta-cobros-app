@@ -1,36 +1,64 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-    <title>Historial de Pagos</title>
+    <meta charset="UTF-8" />
+    <title>Pagos - Solo Ricuras</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        body {
+            background-color: #f7f9fc;
+            padding: 20px;
+        }
+        .table thead {
+            background-color: #4a90e2;
+            color: white;
+        }
+        .table-striped tbody tr:nth-of-type(odd) {
+            background-color: #d9eaff;
+        }
+        .header-title {
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+        .btn-back {
+            margin-bottom: 20px;
+        }
+        .alert-info {
+            max-width: 600px;
+        }
+    </style>
 </head>
 <body>
-    <h2>Historial de Pagos</h2>
+    <div class="container">
+        <h2 class="header-title">Pagos Registrados</h2>
 
-    <table border="1">
-        <thead>
-            <tr>
-                <th>Cliente</th>
-                <th>Monto Pagado</th>
-                <th>Fecha</th>
-                <th>Acciones</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for p in pagos %}
-            <tr>
-                <td>{{ p.nombre }}</td>
-                <td>${{ '%.2f'|format(p.monto) }}</td>
-                <td>{{ p.fecha }}</td>
-                <td>
-                    <a href="/editar_pago/{{ p.id }}">Editar</a> |
-                    <a href="/eliminar_pago/{{ p.id }}" onclick="return confirm('¿Eliminar este pago?')">Eliminar</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+        <a href="{{ url_for('inicio') }}" class="btn btn-secondary btn-back">← Volver a Clientes</a>
 
-    <br>
-    <a href="/inicio">← Volver al inicio</a>
+        {% if pagos %}
+        <table class="table table-striped table-bordered rounded shadow-sm bg-white">
+            <thead>
+                <tr>
+                    <th>ID Pago</th>
+                    <th>Cliente</th>
+                    <th>Monto</th>
+                    <th>Fecha</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pago in pagos %}
+                <tr>
+                    <td>{{ pago['id'] }}</td>
+                    <td>{{ pago['nombre'] }}</td>
+                    <td>${{ '%.2f' | format(pago['monto']) }}</td>
+                    <td>{{ pago['fecha'] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="alert alert-info">No hay pagos registrados aún.</div>
+        {% endif %}
+
+    </div>
 </body>
 </html>
