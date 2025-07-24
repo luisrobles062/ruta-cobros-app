@@ -115,5 +115,14 @@ def pagos():
     conn.close()
     return render_template('pagos.html', pagos=pagos)
 
+@app.route('/debug/columnas')
+def debug_columnas():
+    conn = obtener_conexion()
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(clientes);")
+    cols = cursor.fetchall()
+    conn.close()
+    return "<pre>" + "\n".join(f"{col[1]} ({col[2]})" for col in cols) + "</pre>"
+
 if __name__ == '__main__':
     app.run(debug=True)
