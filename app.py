@@ -1,8 +1,6 @@
 from flask import Flask, render_template, request, redirect, session
 import sqlite3
 from datetime import datetime
-import os
-import shutil
 
 app = Flask(__name__)
 app.secret_key = 'clave_secreta'
@@ -10,15 +8,7 @@ app.secret_key = 'clave_secreta'
 def conectar_db():
     return sqlite3.connect('cobros.db')
 
-# Backup automático al iniciar la app
-@app.before_first_request
-def backup_db():
-    try:
-        if os.path.exists('cobros.db'):
-            shutil.copy('cobros.db', 'cobros_backup.db')
-            print("✅ Backup creado: cobros_backup.db")
-    except Exception as e:
-        print(f"❌ Error haciendo backup: {e}")
+# ------------------ RUTAS ------------------
 
 # Login
 @app.route('/', methods=['GET', 'POST'])
@@ -26,11 +16,13 @@ def login():
     if request.method == 'POST':
         usuario = request.form['usuario']
         clave = request.form['clave']
+
         if usuario == 'admin' and clave == 'admin':
             session['usuario'] = usuario
             return redirect('/inicio')
         else:
             return render_template('login.html', error='Credenciales inválidas')
+
     return render_template('login.html')
 
 # Logout
@@ -39,7 +31,7 @@ def logout():
     session.clear()
     return redirect('/')
 
-# Inicio con lista clientes + total pagado + filtro
+# Inicio - mostrar todos los clientes y pagos filtrados
 @app.route('/inicio')
 def inicio():
     if not session.get('usuario'):
@@ -52,24 +44,12 @@ def inicio():
     cursor = conn.cursor()
 
     if filtro_nombre:
-        cursor.execute("""
-            SELECT c.*, IFNULL(SUM(p.monto), 0) AS total_pagado
-            FROM clientes c
-            LEFT JOIN cobros p ON c.id = p.cliente_id
-            WHERE c.nombre LIKE ?
-            GROUP BY c.id
-            ORDER BY c.nombre ASC
-        """, ('%' + filtro_nombre + '%',))
+        cursor.execute("SELECT * FROM clientes WHERE nombre LIKE ? ORDER BY nombre ASC", ('%'+filtro_nombre+'%',))
     else:
-        cursor.execute("""
-            SELECT c.*, IFNULL(SUM(p.monto), 0) AS total_pagado
-            FROM clientes c
-            LEFT JOIN cobros p ON c.id = p.cliente_id
-            GROUP BY c.id
-            ORDER BY c.nombre ASC
-        """)
+        cursor.execute("SELECT * FROM clientes ORDER BY nombre ASC")
 
     clientes = cursor.fetchall()
+
     pagos = []
     if filtro_nombre and clientes:
         cliente_id = clientes[0]['id']
@@ -126,57 +106,50 @@ def registrar_pago():
     conn.close()
     return redirect('/inicio')
 
-# Editar pago
-@app.route('/editar_pago/<int:id>', methods=['POST'])
-def editar_pago(id):
-    if not session.get('usuario'):
-        return redirect('/')
-
-    nuevo_monto = float(request.form['nuevo_monto'])
-    nuevo_comentario = request.form.get('nuevo_comentario', '')
-
-    conn = conectar_db()
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT cliente_id, monto FROM cobros WHERE id = ?", (id,))
-    pago_anterior = cursor.fetchone()
-
-    if pago_anterior:
-        diferencia = nuevo_monto - pago_anterior[1]
-        cliente_id = pago_anterior[0]
-
-        cursor.execute("UPDATE cobros SET monto = ?, comentario = ? WHERE id = ?",
-                       (nuevo_monto, nuevo_comentario, id))
-        cursor.execute("UPDATE clientes SET deuda = deuda - ? WHERE id = ?", (diferencia, cliente_id))
-
-    conn.commit()
-    conn.close()
-    return redirect('/inicio')
-
-# Eliminar pago
-@app.route('/eliminar_pago/<int:id>', methods=['POST'])
-def eliminar_pago(id):
+# Mostrar formulario para editar cliente
+@app.route('/editar_cliente/<int:id>', methods=['GET'])
+def editar_cliente(id):
     if not session.get('usuario'):
         return redirect('/')
 
     conn = conectar_db()
+    conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
-    cursor.execute("SELECT cliente_id, monto FROM cobros WHERE id = ?", (id,))
-    pago = cursor.fetchone()
+    cursor.execute("SELECT * FROM clientes WHERE id = ?", (id,))
+    cliente = cursor.fetchone()
+    conn.close()
 
-    if pago:
-        cliente_id = pago[0]
-        monto = pago[1]
+    if not cliente:
+        return "Cliente no encontrado", 404
 
-        cursor.execute("DELETE FROM cobros WHERE id = ?", (id,))
-        cursor.execute("UPDATE clientes SET deuda = deuda + ? WHERE id = ?", (monto, cliente_id))
+    return render_template('editar_cliente.html', cliente=cliente)
 
+# Guardar cambios de cliente editado
+@app.route('/editar_cliente/<int:id>', methods=['POST'])
+def actualizar_cliente(id):
+    if not session.get('usuario'):
+        return redirect('/')
+
+    nombre = request.form['nombre']
+    deuda = float(request.form['deuda'])
+    fecha_inicio = request.form['fecha_inicio']
+    observaciones = request.form['observaciones']
+
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE clientes 
+        SET nombre = ?, deuda = ?, fecha_inicio = ?, observaciones = ?
+        WHERE id = ?
+    """, (nombre, deuda, fecha_inicio, observaciones, id))
     conn.commit()
     conn.close()
+
     return redirect('/inicio')
 
-# Crear tablas si no existen
+# ------------------ CREAR TABLAS SI NO EXISTEN ------------------
+
 if __name__ == '__main__':
     conn = conectar_db()
     cursor = conn.cursor()
