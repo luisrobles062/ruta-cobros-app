@@ -83,6 +83,39 @@ def nuevo_cliente():
 
     return render_template('nuevo.html')
 
+# Editar cliente
+@app.route('/editar_cliente/<int:cliente_id>', methods=['GET', 'POST'])
+def editar_cliente(cliente_id):
+    if not session.get('usuario'):
+        return redirect('/')
+
+    conn = conectar_db()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    if request.method == 'POST':
+        nombre = request.form['nombre']
+        deuda = float(request.form['deuda'])
+        fecha_inicio = request.form['fecha_inicio']
+        observaciones = request.form['observaciones']
+
+        cursor.execute(
+            "UPDATE clientes SET nombre = ?, deuda = ?, fecha_inicio = ?, observaciones = ? WHERE id = ?",
+            (nombre, deuda, fecha_inicio, observaciones, cliente_id)
+        )
+        conn.commit()
+        conn.close()
+        return redirect('/inicio?filtro=' + nombre)
+
+    else:
+        cursor.execute("SELECT * FROM clientes WHERE id = ?", (cliente_id,))
+        cliente = cursor.fetchone()
+        conn.close()
+        if cliente:
+            return render_template('editar_cliente.html', cliente=cliente)
+        else:
+            return "Cliente no encontrado", 404
+
 # Registrar pago
 @app.route('/pago', methods=['POST'])
 def registrar_pago():
@@ -104,11 +137,11 @@ def registrar_pago():
 
     conn.commit()
     conn.close()
-    return redirect('/inicio')
+    return redirect('/inicio?filtro=' + str(cliente_id))
 
-# Mostrar formulario para editar cliente
-@app.route('/editar_cliente/<int:id>', methods=['GET'])
-def editar_cliente(id):
+# Editar pago
+@app.route('/editar_pago/<int:pago_id>', methods=['GET', 'POST'])
+def editar_pago(pago_id):
     if not session.get('usuario'):
         return redirect('/')
 
@@ -116,37 +149,65 @@ def editar_cliente(id):
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM clientes WHERE id = ?", (id,))
-    cliente = cursor.fetchone()
-    conn.close()
+    if request.method == 'POST':
+        nuevo_monto = float(request.form['monto'])
+        nuevo_comentario = request.form.get('comentario', '')
 
-    if not cliente:
-        return "Cliente no encontrado", 404
+        cursor.execute("SELECT cliente_id, monto FROM cobros WHERE id = ?", (pago_id,))
+        pago = cursor.fetchone()
 
-    return render_template('editar_cliente.html', cliente=cliente)
+        if pago:
+            cliente_id = pago['cliente_id']
+            monto_anterior = pago['monto']
 
-# Guardar cambios de cliente editado
-@app.route('/editar_cliente/<int:id>', methods=['POST'])
-def actualizar_cliente(id):
+            cursor.execute("UPDATE cobros SET monto = ?, comentario = ? WHERE id = ?", (nuevo_monto, nuevo_comentario, pago_id))
+
+            diferencia = monto_anterior - nuevo_monto
+            cursor.execute("UPDATE clientes SET deuda = deuda + ? WHERE id = ?", (diferencia, cliente_id))
+
+            conn.commit()
+            conn.close()
+            return redirect('/inicio?filtro=' + str(cliente_id))
+        else:
+            conn.close()
+            return "Pago no encontrado", 404
+
+    else:
+        cursor.execute("SELECT * FROM cobros WHERE id = ?", (pago_id,))
+        pago = cursor.fetchone()
+        conn.close()
+        if pago:
+            return render_template('editar_pago.html', pago=pago)
+        else:
+            return "Pago no encontrado", 404
+
+# Eliminar pago
+@app.route('/eliminar_pago', methods=['POST'])
+def eliminar_pago():
     if not session.get('usuario'):
         return redirect('/')
 
-    nombre = request.form['nombre']
-    deuda = float(request.form['deuda'])
-    fecha_inicio = request.form['fecha_inicio']
-    observaciones = request.form['observaciones']
+    pago_id = request.form['pago_id']
 
     conn = conectar_db()
     cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE clientes 
-        SET nombre = ?, deuda = ?, fecha_inicio = ?, observaciones = ?
-        WHERE id = ?
-    """, (nombre, deuda, fecha_inicio, observaciones, id))
-    conn.commit()
-    conn.close()
 
-    return redirect('/inicio')
+    cursor.execute("SELECT cliente_id, monto FROM cobros WHERE id = ?", (pago_id,))
+    pago = cursor.fetchone()
+
+    if pago:
+        cliente_id = pago[0]
+        monto = pago[1]
+
+        cursor.execute("DELETE FROM cobros WHERE id = ?", (pago_id,))
+        cursor.execute("UPDATE clientes SET deuda = deuda + ? WHERE id = ?", (monto, cliente_id))
+
+        conn.commit()
+        conn.close()
+        return redirect('/inicio?filtro=' + str(cliente_id))
+    else:
+        conn.close()
+        return "Pago no encontrado", 404
 
 # ------------------ CREAR TABLAS SI NO EXISTEN ------------------
 
