@@ -106,6 +106,60 @@ def registrar_pago():
     conn.close()
     return redirect('/inicio')
 
+# Editar pago
+@app.route('/editar_pago', methods=['POST'])
+def editar_pago():
+    if not session.get('usuario'):
+        return redirect('/')
+
+    pago_id = request.form['pago_id']
+    nuevo_monto = float(request.form['nuevo_monto'])
+
+    conn = conectar_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT cliente_id, monto FROM cobros WHERE id = ?", (pago_id,))
+    pago = cursor.fetchone()
+    if pago is None:
+        conn.close()
+        return "Pago no encontrado", 404
+
+    cliente_id, monto_viejo = pago
+    diferencia = nuevo_monto - monto_viejo
+
+    cursor.execute("UPDATE cobros SET monto = ? WHERE id = ?", (nuevo_monto, pago_id))
+    cursor.execute("UPDATE clientes SET deuda = deuda - ? WHERE id = ?", (diferencia, cliente_id))
+
+    conn.commit()
+    conn.close()
+    return redirect('/inicio')
+
+# Eliminar pago
+@app.route('/eliminar_pago', methods=['POST'])
+def eliminar_pago():
+    if not session.get('usuario'):
+        return redirect('/')
+
+    pago_id = request.form['pago_id']
+
+    conn = conectar_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT cliente_id, monto FROM cobros WHERE id = ?", (pago_id,))
+    pago = cursor.fetchone()
+    if pago is None:
+        conn.close()
+        return "Pago no encontrado", 404
+
+    cliente_id, monto = pago
+
+    cursor.execute("DELETE FROM cobros WHERE id = ?", (pago_id,))
+    cursor.execute("UPDATE clientes SET deuda = deuda + ? WHERE id = ?", (monto, cliente_id))
+
+    conn.commit()
+    conn.close()
+    return redirect('/inicio')
+
 # ------------------ CREAR TABLAS SI NO EXISTEN ------------------
 
 if __name__ == '__main__':
