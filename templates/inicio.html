@@ -2,68 +2,114 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8" />
-    <title>Clientes - Solo Ricuras</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <title>Listado de Clientes</title>
     <style>
-        body {
-            background-color: #f7f9fc;
-            padding: 20px;
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f9f9f9; }
+        h1 { margin-bottom: 10px; }
+        input[type="text"] {
+            padding: 8px; width: 250px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc;
         }
-        .table thead {
-            background-color: #4a90e2;
-            color: white;
+        table {
+            border-collapse: collapse; width: 100%; background: white;
         }
-        .table-striped tbody tr:nth-of-type(odd) {
-            background-color: #d9eaff;
+        th, td {
+            padding: 10px; border: 1px solid #ddd; text-align: left;
         }
-        .filter-input {
-            max-width: 300px;
-            margin-bottom: 15px;
+        th {
+            background-color: #007bff; color: white;
         }
-        .header-title {
-            color: #2c3e50;
-            margin-bottom: 20px;
+        .btn {
+            background-color: #28a745; color: white; padding: 8px 15px; text-decoration: none; border-radius: 5px;
+            margin-bottom: 15px; display: inline-block;
+        }
+        .btn:hover { background-color: #218838; }
+        .logout {
+            float: right; background-color: #dc3545; padding: 8px 15px; border-radius: 5px; color: white;
+            text-decoration: none;
+        }
+        .logout:hover { background-color: #c82333; }
+        .pagos-container {
+            margin-top: 30px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .no-data {
+            font-style: italic;
+            color: #666;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2 class="header-title">Clientes - Solo Ricuras</h2>
+    <h1>Listado de Clientes</h1>
+    <a href="/nuevo" class="btn">Agregar nuevo cliente</a>
+    <a href="/logout" class="logout">Cerrar sesión</a>
+    <form method="GET" action="/inicio">
+        <label for="filtro">Filtrar por nombre:</label>
+        <input type="text" id="filtro" name="filtro" placeholder="Buscar cliente..." value="{{ filtro }}">
+        <input type="submit" value="Filtrar">
+    </form>
 
-        <form method="get" action="{{ url_for('inicio') }}" class="mb-3 d-flex">
-            <input type="text" name="filtro" class="form-control filter-input" placeholder="Buscar cliente..." value="{{ filtro }}" />
-            <button type="submit" class="btn btn-primary ms-2">Filtrar</button>
-            <a href="{{ url_for('nuevo') }}" class="btn btn-success ms-auto">+ Nuevo Cliente</a>
-        </form>
+    {% if clientes %}
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Nombre</th>
+                <th>Monto Prestado</th>
+                <th>Deuda Actual</th>
+                <th>Observaciones</th>
+                <th>Pago</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for cliente in clientes %}
+            <tr>
+                <td>{{ cliente.fecha_inicio }}</td>
+                <td>{{ cliente.nombre }}</td>
+                <td>{{ "{:,.0f}".format(cliente.deuda + (pagos | sum(attribute='monto') if pagos else 0)) | replace(',', '.') }}</td>
+                <td>{{ "{:,.0f}".format(cliente.deuda) | replace(',', '.') }}</td>
+                <td>{{ cliente.observaciones }}</td>
+                <td>
+                    <form method="POST" action="/pago" style="display:inline-block;">
+                        <input type="hidden" name="cliente_id" value="{{ cliente.id }}">
+                        <input type="number" name="monto" min="1" required style="width: 80px;">
+                        <input type="submit" value="Registrar Pago">
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        <p class="no-data">No hay clientes registrados.</p>
+    {% endif %}
 
-        <table class="table table-striped table-bordered rounded shadow-sm bg-white">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Fecha</th>
-                    <th>Nombre</th>
-                    <th>Monto</th>
-                    <th>Deuda</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for cliente in clientes %}
-                <tr>
-                    <td>{{ cliente[0] }}</td>
-                    <td>{{ cliente[1] }}</td>
-                    <td>{{ cliente[2] }}</td>
-                    <td>${{ '%.2f' | format(cliente[3]) }}</td>
-                    <td>${{ '%.2f' | format(cliente[5]) }}</td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="5" class="text-center text-muted">No hay clientes para mostrar</td>
-                </tr>
+    <div class="pagos-container">
+        <h2>Pagos del cliente</h2>
+        {% if pagos %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Monto</th>
+                        <th>Comentario</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for pago in pagos %}
+                    <tr>
+                        <td>{{ pago.fecha }}</td>
+                        <td>{{ "{:,.0f}".format(pago.monto) | replace(',', '.') }}</td>
+                        <td>{{ pago.comentario }}</td>
+                    </tr>
                 {% endfor %}
-            </tbody>
-        </table>
-
-        <a href="{{ url_for('logout') }}" class="btn btn-outline-danger mt-3">Cerrar sesión</a>
+                </tbody>
+            </table>
+        {% else %}
+            <p class="no-data">No hay pagos registrados para este cliente.</p>
+        {% endif %}
     </div>
 </body>
 </html>
