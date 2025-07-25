@@ -4,19 +4,41 @@
     <meta charset="UTF-8" />
     <title>Listado de Clientes</title>
     <style>
-        /* —— estilos originales + botones —— */
         body { font-family: Arial, sans-serif; margin: 20px; background-color: #f9f9f9; }
         h1 { margin-bottom: 10px; }
-        input[type="text"] { padding: 8px; width: 250px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc; }
-        table { border-collapse: collapse; width: 100%; background: white; }
-        th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
-        th { background-color: #007bff; color: white; }
-        .btn        { background-color: #28a745; color: white; padding: 8px 15px; text-decoration: none; border-radius: 5px; margin-bottom: 15px; display: inline-block; }
-        .btn:hover  { background-color: #218838; }
-        .logout     { float: right; background-color: #dc3545; padding: 8px 15px; border-radius: 5px; color: white; text-decoration: none; }
+        input[type="text"] {
+            padding: 8px; width: 250px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc;
+        }
+        table {
+            border-collapse: collapse; width: 100%; background: white;
+        }
+        th, td {
+            padding: 10px; border: 1px solid #ddd; text-align: left;
+        }
+        th {
+            background-color: #007bff; color: white;
+        }
+        .btn {
+            background-color: #28a745; color: white; padding: 8px 15px; text-decoration: none; border-radius: 5px;
+            margin-bottom: 15px; display: inline-block;
+        }
+        .btn:hover { background-color: #218838; }
+        .logout {
+            float: right; background-color: #dc3545; padding: 8px 15px; border-radius: 5px; color: white;
+            text-decoration: none;
+        }
         .logout:hover { background-color: #c82333; }
-        .pagos-container { margin-top: 30px; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        .no-data { font-style: italic; color: #666; }
+        .pagos-container {
+            margin-top: 30px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .no-data {
+            font-style: italic;
+            color: #666;
+        }
         .btn-edit  { background-color: #ffc107; color: black; padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px; }
         .btn-delete{ background-color: #dc3545; color: white; padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; }
         form.inline-form { display: inline-block; margin: 0; }
@@ -25,10 +47,8 @@
 </head>
 <body>
     <h1>Listado de Clientes</h1>
-
-    <a href="/nuevo"  class="btn">Agregar nuevo cliente</a>
+    <a href="/nuevo" class="btn">Agregar nuevo cliente</a>
     <a href="/logout" class="logout">Cerrar sesión</a>
-
     <form method="GET" action="/inicio">
         <label for="filtro">Filtrar por nombre:</label>
         <input type="text" id="filtro" name="filtro" placeholder="Buscar cliente..." value="{{ filtro }}">
@@ -41,9 +61,9 @@
             <tr>
                 <th>Fecha</th>
                 <th>Nombre</th>
-                <th>Monto Prestado</th>
-                <th>Deuda Actual</th>
-                <th><strong>Total Pagado</strong></th>
+                <th>Monto Prestado</th>
+                <th>Deuda Actual</th>
+                <th>Total Pagado</th>
                 <th>Observaciones</th>
                 <th>Pago</th>
             </tr>
@@ -92,8 +112,8 @@
                         <td>{{ pago.comentario }}</td>
                         <td>
                             <form class="inline-form" method="POST" action="/editar_pago/{{ pago.id }}">
-                                <input type="number" name="nuevo_monto"      min="1" required class="edit-input" placeholder="Nuevo monto">
-                                <input type="text"   name="nuevo_comentario"                    placeholder="Comentario" style="width:120px;">
+                                <input type="number" name="nuevo_monto" min="1" required class="edit-input" placeholder="Nuevo monto">
+                                <input type="text" name="nuevo_comentario" placeholder="Comentario" style="width:120px;">
                                 <button type="submit" class="btn-edit">Editar</button>
                             </form>
                             <form class="inline-form" method="POST" action="/eliminar_pago/{{ pago.id }}" onsubmit="return confirm('¿Seguro que deseas eliminar este pago?');">
