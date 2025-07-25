@@ -49,11 +49,11 @@
             <tbody>
                 {% for cliente in clientes %}
                 <tr>
-                    <td>{{ cliente['id'] }}</td>
-                    <td>{{ cliente['fecha'] }}</td>
-                    <td>{{ cliente['nombre'] }}</td>
-                    <td>${{ '%.2f' | format(cliente['monto']) }}</td>
-                    <td>${{ '%.2f' | format(cliente['deuda']) }}</td>
+                    <td>{{ cliente[0] }}</td>
+                    <td>{{ cliente[1] }}</td>
+                    <td>{{ cliente[2] }}</td>
+                    <td>${{ '%.2f' | format(cliente[3]) }}</td>
+                    <td>${{ '%.2f' | format(cliente[5]) }}</td>
                 </tr>
                 {% else %}
                 <tr>
