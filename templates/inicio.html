@@ -23,6 +23,32 @@
             margin-bottom: 15px; display: inline-block;
         }
         .btn:hover { background-color: #218838; }
+        .btn-edit {
+            background-color: #ffc107;
+            color: black;
+            margin-bottom: 5px;
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            text-decoration: none;
+            font-size: 0.9em;
+        }
+        .btn-edit:hover {
+            background-color: #e0a800;
+        }
+        .btn-delete {
+            background-color: #dc3545;
+            color: white;
+            margin-left: 5px;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        .btn-delete:hover {
+            background-color: #c82333;
+        }
         .logout {
             float: right; background-color: #dc3545; padding: 8px 15px; border-radius: 5px; color: white;
             text-decoration: none;
@@ -38,6 +64,9 @@
         .no-data {
             font-style: italic;
             color: #666;
+        }
+        form.inline {
+            display: inline;
         }
     </style>
 </head>
@@ -72,7 +101,7 @@
                 <td>{{ "{:,.0f}".format(cliente.deuda) | replace(',', '.') }}</td>
                 <td>{{ cliente.observaciones }}</td>
                 <td>
-                    <a href="/editar_cliente/{{ cliente.id }}" class="btn" style="background-color:#ffc107; margin-bottom:5px; display:inline-block;">Editar Cliente</a>
+                    <a href="/editar_cliente/{{ cliente.id }}" class="btn-edit">Editar Cliente</a>
                     <form method="POST" action="/pago" style="display:inline-block;">
                         <input type="hidden" name="cliente_id" value="{{ cliente.id }}">
                         <input type="number" name="monto" min="1" required style="width: 80px;">
@@ -96,6 +125,7 @@
                         <th>Fecha</th>
                         <th>Monto</th>
                         <th>Comentario</th>
+                        <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -104,6 +134,14 @@
                         <td>{{ pago.fecha }}</td>
                         <td>{{ "{:,.0f}".format(pago.monto) | replace(',', '.') }}</td>
                         <td>{{ pago.comentario }}</td>
+                        <td>
+                            <a href="/editar_pago/{{ pago.id }}" class="btn-edit">Editar</a>
+
+                            <form method="POST" action="/eliminar_pago" class="inline" onsubmit="return confirm('¿Seguro quieres eliminar este pago?');">
+                                <input type="hidden" name="pago_id" value="{{ pago.id }}">
+                                <button type="submit" class="btn-delete">Eliminar</button>
+                            </form>
+                        </td>
                     </tr>
                 {% endfor %}
                 </tbody>
