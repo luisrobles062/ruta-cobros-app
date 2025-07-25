@@ -1,9 +1,8 @@
-from flask import Flask, render_template, request, redirect, session, url_for, flash
+from flask import Flask, render_template, request, redirect, session, flash
 import sqlite3
-import os
 
 app = Flask(__name__)
-app.secret_key = 'clave_secreta'
+app.secret_key = 'clave_secreta'  # Cambia esta clave si quieres
 
 DB_PATH = 'cobros.db'
 
@@ -14,12 +13,14 @@ def obtener_conexion():
 def login():
     if request.method == 'POST':
         usuario = request.form['usuario']
-        clave = request.form['clave']  # Aquí corregido para que coincida con el name="clave" en el HTML
+        clave = request.form['clave']  # debe coincidir con el campo "name" del formulario
+
         if usuario == 'admin' and clave == 'admin':
             session['usuario'] = usuario
             return redirect('/inicio')
         else:
             flash('Credenciales incorrectas', 'error')
+
     return render_template('login.html')
 
 @app.route('/logout')
@@ -49,19 +50,20 @@ def inicio():
     clientes = cursor.fetchall()
 
     if request.method == 'POST':
-        cliente_id = request.form['cliente_id']
-        pago = float(request.form['pago'])
+        try:
+            cliente_id = request.form['cliente_id']
+            pago = float(request.form['pago'])
 
-        # Registrar pago
-        cursor.execute("INSERT INTO pagos (cliente_id, monto_pagado, fecha_pago) VALUES (?, ?, DATE('now'))",
-                       (cliente_id, pago))
-        
-        # Actualizar deuda
-        cursor.execute("UPDATE clientes SET deuda_actual = deuda_actual - ? WHERE id = ?",
-                       (pago, cliente_id))
-        conn.commit()
-        
-        return redirect('/inicio')
+            cursor.execute("INSERT INTO pagos (cliente_id, monto_pagado, fecha_pago) VALUES (?, ?, DATE('now'))",
+                           (cliente_id, pago))
+            cursor.execute("UPDATE clientes SET deuda_actual = deuda_actual - ? WHERE id = ?",
+                           (pago, cliente_id))
+            conn.commit()
+            return redirect('/inicio')
+
+        except Exception as e:
+            conn.rollback()
+            flash(f'Error al registrar pago: {e}', 'error')
 
     conn.close()
     return render_template('inicio.html', clientes=clientes, filtro=filtro)
@@ -114,15 +116,6 @@ def pagos():
     pagos = cursor.fetchall()
     conn.close()
     return render_template('pagos.html', pagos=pagos)
-
-@app.route('/debug/columnas')
-def debug_columnas():
-    conn = obtener_conexion()
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA table_info(clientes);")
-    cols = cursor.fetchall()
-    conn.close()
-    return "<pre>" + "\n".join(f"{col[1]} ({col[2]})" for col in cols) + "</pre>"
 
 if __name__ == '__main__':
     app.run(debug=True)
