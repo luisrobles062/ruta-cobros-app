@@ -34,7 +34,7 @@ def logout():
 # Inicio - mostrar todos los clientes y pagos filtrados
 @app.route('/inicio')
 def inicio():
-    if not session.get('usuario'):
+    if not session.get('usuario):
         return redirect('/')
 
     filtro_nombre = request.args.get('filtro', '').strip()
@@ -96,10 +96,19 @@ def registrar_pago():
     conn = conectar_db()
     cursor = conn.cursor()
 
+    # Actualiza deuda
     cursor.execute("UPDATE clientes SET deuda = deuda - ? WHERE id = ?", (monto, cliente_id))
+
+    # Guarda en tabla 'cobros'
     cursor.execute(
         "INSERT INTO cobros (cliente_id, monto, comentario, fecha) VALUES (?, ?, ?, ?)",
         (cliente_id, monto, comentario, datetime.now().strftime('%Y-%m-%d'))
+    )
+
+    # También guarda en la nueva tabla 'pagos'
+    cursor.execute(
+        "INSERT INTO pagos (cliente_id, fecha, monto) VALUES (?, ?, ?)",
+        (cliente_id, datetime.now().strftime('%Y-%m-%d'), monto)
     )
 
     conn.commit()
@@ -126,6 +135,15 @@ if __name__ == '__main__':
         monto REAL,
         comentario TEXT,
         fecha TEXT DEFAULT (date('now'))
+    )''')
+
+    # Nueva tabla para registrar los pagos con más control
+    cursor.execute('''CREATE TABLE IF NOT EXISTS pagos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cliente_id INTEGER,
+        fecha TEXT,
+        monto REAL,
+        FOREIGN KEY (cliente_id) REFERENCES clientes(id)
     )''')
 
     conn.commit()
