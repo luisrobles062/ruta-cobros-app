@@ -39,10 +39,6 @@
             font-style: italic;
             color: #666;
         }
-        .btn-edit  { background-color: #ffc107; color: black; padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px; }
-        .btn-delete{ background-color: #dc3545; color: white; padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; }
-        form.inline-form { display: inline-block; margin: 0; }
-        input[type="number"].edit-input { width: 80px; padding: 4px; margin-right: 5px; border-radius: 3px; border: 1px solid #ccc; }
     </style>
 </head>
 <body>
@@ -63,7 +59,6 @@
                 <th>Nombre</th>
                 <th>Monto Prestado</th>
                 <th>Deuda Actual</th>
-                <th>Total Pagado</th>
                 <th>Observaciones</th>
                 <th>Pago</th>
             </tr>
@@ -73,11 +68,11 @@
             <tr>
                 <td>{{ cliente.fecha_inicio }}</td>
                 <td>{{ cliente.nombre }}</td>
-                <td>{{ "{:,.0f}".format(cliente.deuda + cliente.total_pagado) | replace(',', '.') }}</td>
-                <td>{{ "{:,.0f}".format(cliente.deuda)             | replace(',', '.') }}</td>
-                <td>{{ "{:,.0f}".format(cliente.total_pagado)      | replace(',', '.') }}</td>
+                <td>{{ "{:,.0f}".format(cliente.deuda + (pagos | sum(attribute='monto') if pagos else 0)) | replace(',', '.') }}</td>
+                <td>{{ "{:,.0f}".format(cliente.deuda) | replace(',', '.') }}</td>
                 <td>{{ cliente.observaciones }}</td>
                 <td>
+                    <a href="/editar_cliente/{{ cliente.id }}" class="btn" style="background-color:#ffc107; margin-bottom:5px; display:inline-block;">Editar Cliente</a>
                     <form method="POST" action="/pago" style="display:inline-block;">
                         <input type="hidden" name="cliente_id" value="{{ cliente.id }}">
                         <input type="number" name="monto" min="1" required style="width: 80px;">
@@ -101,7 +96,6 @@
                         <th>Fecha</th>
                         <th>Monto</th>
                         <th>Comentario</th>
-                        <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -110,16 +104,6 @@
                         <td>{{ pago.fecha }}</td>
                         <td>{{ "{:,.0f}".format(pago.monto) | replace(',', '.') }}</td>
                         <td>{{ pago.comentario }}</td>
-                        <td>
-                            <form class="inline-form" method="POST" action="/editar_pago/{{ pago.id }}">
-                                <input type="number" name="nuevo_monto" min="1" required class="edit-input" placeholder="Nuevo monto">
-                                <input type="text" name="nuevo_comentario" placeholder="Comentario" style="width:120px;">
-                                <button type="submit" class="btn-edit">Editar</button>
-                            </form>
-                            <form class="inline-form" method="POST" action="/eliminar_pago/{{ pago.id }}" onsubmit="return confirm('¿Seguro que deseas eliminar este pago?');">
-                                <button type="submit" class="btn-delete">Eliminar</button>
-                            </form>
-                        </td>
                     </tr>
                 {% endfor %}
                 </tbody>
