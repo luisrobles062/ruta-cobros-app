@@ -6,7 +6,6 @@ from datetime import datetime
 app = Flask(__name__)
 app.secret_key = 'clave_secreta'
 
-# Configura tu conexión a PostgreSQL
 DB_URL = 'postgresql://cobros_user:qf5rdhUywTUKi0qRFvtK2TQrgvaHtBjQ@dpg-d21or4emcj7s73eqk1j0-a.oregon-postgres.render.com/cobros_db_apyt'
 
 def get_db_connection():
@@ -44,9 +43,9 @@ def inicio():
         cur.execute("SELECT * FROM clientes ORDER BY id")
     clientes = cur.fetchall()
 
-    # Obtener pagos por cliente
+    # Obtener pagos por cliente (sumar campo 'pago' de historial_pagos)
     pagos_dict = {}
-    cur.execute("SELECT cliente_id, SUM(monto) as total_pagado FROM pagos GROUP BY cliente_id")
+    cur.execute("SELECT cliente_id, SUM(pago) as total_pagado FROM historial_pagos GROUP BY cliente_id")
     for fila in cur.fetchall():
         pagos_dict[fila['cliente_id']] = fila['total_pagado']
 
@@ -62,15 +61,15 @@ def nuevo():
         fecha = request.form['fecha']
         monto = float(request.form['monto'])
         porcentaje = float(request.form['porcentaje'])
-        deuda_actual = monto + (monto * porcentaje / 100)
+        deuda = monto + (monto * porcentaje / 100)
         observaciones = request.form['observaciones']
 
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO clientes (fecha, nombre, monto, porcentaje, deuda_actual, observaciones)
+            INSERT INTO clientes (fecha, nombre, monto, porcentaje, deuda, observaciones)
             VALUES (%s, %s, %s, %s, %s, %s)
-        """, (fecha, nombre, monto, porcentaje, deuda_actual, observaciones))
+        """, (fecha, nombre, monto, porcentaje, deuda, observaciones))
         conn.commit()
         conn.close()
         return redirect('/inicio')
@@ -82,9 +81,10 @@ def registrar_pago(cliente_id):
 
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("INSERT INTO pagos (cliente_id, monto, fecha) VALUES (%s, %s, %s)",
+    cur.execute("INSERT INTO historial_pagos (cliente_id, pago, fecha_pago) VALUES (%s, %s, %s)",
                 (cliente_id, monto_pago, datetime.now()))
-    cur.execute("UPDATE clientes SET deuda_actual = deuda_actual - %s WHERE id = %s",
+    # Actualizar deuda restando el pago
+    cur.execute("UPDATE clientes SET deuda = deuda - %s WHERE id = %s",
                 (monto_pago, cliente_id))
     conn.commit()
     conn.close()
@@ -103,13 +103,13 @@ def editar_cliente(id):
         fecha = request.form['fecha']
         monto = float(request.form['monto'])
         porcentaje = float(request.form['porcentaje'])
-        deuda_actual = float(request.form['deuda_actual'])
+        deuda = float(request.form['deuda'])
         observaciones = request.form['observaciones']
 
         cur.execute("""
             UPDATE clientes SET fecha=%s, nombre=%s, monto=%s, porcentaje=%s,
-            deuda_actual=%s, observaciones=%s WHERE id=%s
-        """, (fecha, nombre, monto, porcentaje, deuda_actual, observaciones, id))
+            deuda=%s, observaciones=%s WHERE id=%s
+        """, (fecha, nombre, monto, porcentaje, deuda, observaciones, id))
         conn.commit()
         conn.close()
         return redirect('/inicio')
@@ -126,18 +126,18 @@ def editar_pago(cliente_id, pago_id):
 
     if request.method == 'POST':
         nuevo_monto = float(request.form['monto'])
-        cur.execute("SELECT monto FROM pagos WHERE id = %s", (pago_id,))
-        anterior_monto = cur.fetchone()['monto']
+        cur.execute("SELECT pago FROM historial_pagos WHERE id = %s", (pago_id,))
+        anterior_monto = cur.fetchone()['pago']
         diferencia = nuevo_monto - anterior_monto
 
-        cur.execute("UPDATE pagos SET monto = %s WHERE id = %s", (nuevo_monto, pago_id))
-        cur.execute("UPDATE clientes SET deuda_actual = deuda_actual - %s WHERE id = %s",
+        cur.execute("UPDATE historial_pagos SET pago = %s WHERE id = %s", (nuevo_monto, pago_id))
+        cur.execute("UPDATE clientes SET deuda = deuda - %s WHERE id = %s",
                     (diferencia, cliente_id))
         conn.commit()
         conn.close()
         return redirect('/inicio')
 
-    cur.execute("SELECT * FROM pagos WHERE id = %s", (pago_id,))
+    cur.execute("SELECT * FROM historial_pagos WHERE id = %s", (pago_id,))
     pago = cur.fetchone()
     conn.close()
     return render_template('editar_pago.html', pago=pago, cliente_id=cliente_id)
@@ -147,11 +147,11 @@ def eliminar_pago(cliente_id, pago_id):
     conn = get_db_connection()
     cur = conn.cursor()
 
-    cur.execute("SELECT monto FROM pagos WHERE id = %s", (pago_id,))
-    monto = cur.fetchone()['monto']
+    cur.execute("SELECT pago FROM historial_pagos WHERE id = %s", (pago_id,))
+    monto = cur.fetchone()['pago']
 
-    cur.execute("DELETE FROM pagos WHERE id = %s", (pago_id,))
-    cur.execute("UPDATE clientes SET deuda_actual = deuda_actual + %s WHERE id = %s",
+    cur.execute("DELETE FROM historial_pagos WHERE id = %s", (pago_id,))
+    cur.execute("UPDATE clientes SET deuda = deuda + %s WHERE id = %s",
                 (monto, cliente_id))
     conn.commit()
     conn.close()
