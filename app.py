@@ -6,6 +6,7 @@ from datetime import datetime
 app = Flask(__name__)
 app.secret_key = 'clave_secreta'
 
+# Configura tu conexión a PostgreSQL
 DB_URL = 'postgresql://cobros_user:qf5rdhUywTUKi0qRFvtK2TQrgvaHtBjQ@dpg-d21or4emcj7s73eqk1j0-a.oregon-postgres.render.com/cobros_db_apyt'
 
 def get_db_connection():
@@ -16,7 +17,7 @@ def get_db_connection():
 def login():
     if request.method == 'POST':
         usuario = request.form['usuario']
-        contrasena = request.form['contrasena']
+        contrasena = request.form['clave']  # <-- Cambiado a 'clave' para coincidir con el formulario
         if usuario == 'admin' and contrasena == 'admin':
             session['usuario'] = usuario
             return redirect('/inicio')
@@ -43,7 +44,7 @@ def inicio():
         cur.execute("SELECT * FROM clientes ORDER BY id")
     clientes = cur.fetchall()
 
-    # Obtener pagos por cliente (sumar campo 'pago' de historial_pagos)
+    # Obtener pagos por cliente
     pagos_dict = {}
     cur.execute("SELECT cliente_id, SUM(pago) as total_pagado FROM historial_pagos GROUP BY cliente_id")
     for fila in cur.fetchall():
@@ -61,7 +62,7 @@ def nuevo():
         fecha = request.form['fecha']
         monto = float(request.form['monto'])
         porcentaje = float(request.form['porcentaje'])
-        deuda = monto + (monto * porcentaje / 100)
+        deuda_actual = monto + (monto * porcentaje / 100)
         observaciones = request.form['observaciones']
 
         conn = get_db_connection()
@@ -69,7 +70,7 @@ def nuevo():
         cur.execute("""
             INSERT INTO clientes (fecha, nombre, monto, porcentaje, deuda, observaciones)
             VALUES (%s, %s, %s, %s, %s, %s)
-        """, (fecha, nombre, monto, porcentaje, deuda, observaciones))
+        """, (fecha, nombre, monto, porcentaje, deuda_actual, observaciones))
         conn.commit()
         conn.close()
         return redirect('/inicio')
@@ -83,7 +84,6 @@ def registrar_pago(cliente_id):
     cur = conn.cursor()
     cur.execute("INSERT INTO historial_pagos (cliente_id, pago, fecha_pago) VALUES (%s, %s, %s)",
                 (cliente_id, monto_pago, datetime.now()))
-    # Actualizar deuda restando el pago
     cur.execute("UPDATE clientes SET deuda = deuda - %s WHERE id = %s",
                 (monto_pago, cliente_id))
     conn.commit()
