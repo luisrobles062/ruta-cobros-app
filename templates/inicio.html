@@ -1,94 +1,70 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8" />
-    <title>Listado de Clientes</title>
+    <meta charset="UTF-8">
+    <title>Clientes - Solo Ricuras</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f9f9f9; }
-        h1 { margin-bottom: 10px; }
-        input[type="text"] {
-            padding: 8px; width: 250px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc;
-        }
-        table {
-            border-collapse: collapse; width: 100%; background: white;
-        }
-        th, td {
-            padding: 10px; border: 1px solid #ddd; text-align: left;
-        }
-        th {
-            background-color: #007bff; color: white;
-        }
-        .btn {
-            background-color: #28a745; color: white; padding: 8px 15px; text-decoration: none; border-radius: 5px;
-            margin-bottom: 15px; display: inline-block;
-        }
-        .btn:hover { background-color: #218838; }
-        .btn-edit {
-            background-color: #ffc107;
-            color: black;
-            margin-bottom: 5px;
-            display: inline-block;
-            padding: 5px 10px;
-            border-radius: 4px;
-            text-decoration: none;
-            font-size: 0.9em;
-        }
-        .btn-edit:hover {
-            background-color: #e0a800;
-        }
-        .logout {
-            float: right; background-color: #dc3545; padding: 8px 15px; border-radius: 5px; color: white;
-            text-decoration: none;
-        }
-        .logout:hover { background-color: #c82333; }
-        form.inline {
-            display: inline;
-        }
+        body { background-color: #f8f9fa; padding: 20px; }
+        h2 { color: #343a40; margin-bottom: 20px; }
+        .form-inline input { margin-right: 10px; }
+        .btn-primary, .btn-success, .btn-info { margin-right: 5px; }
+        .table th { background-color: #007bff; color: white; }
+        .table-striped tbody tr:nth-of-type(odd) { background-color: #e9f5ff; }
+        .form-pago { display: flex; flex-direction: row; align-items: center; gap: 5px; flex-wrap: wrap; }
+        .form-pago input[type="number"] { max-width: 100px; }
+        .form-pago button { white-space: nowrap; }
     </style>
 </head>
 <body>
-    <h1>Listado de Clientes</h1>
-    <a href="/nuevo" class="btn">Agregar nuevo cliente</a>
-    <a href="/logout" class="logout">Cerrar sesión</a>
-    <form method="GET" action="/inicio">
-        <label for="filtro">Filtrar por nombre:</label>
-        <input type="text" id="filtro" name="filtro" placeholder="Buscar cliente..." value="{{ filtro }}">
-        <input type="submit" value="Filtrar">
-    </form>
+    <div class="container">
+        <h2>Clientes - Solo Ricuras</h2>
 
-    {% if clientes %}
-    <table>
-        <thead>
-            <tr>
-                <th>Fecha</th>
-                <th>Nombre</th>
-                <th>Monto Prestado</th>
-                <th>Deuda Actual</th>
-                <th>Observaciones</th>
-                <th>Pago</th>
-            </tr>
-        </thead>
-        <tbody>
-        {% for cliente in clientes %}
-            <tr>
-                <td>{{ cliente.fecha }}</td>
-                <td>{{ cliente.nombre }}</td>
-                <td>{{ "{:,.0f}".format(cliente.monto) | replace(',', '.') }}</td>
-                <td>{{ "{:,.0f}".format(cliente.deuda_actual) | replace(',', '.') }}</td>
-                <td>{{ cliente.observaciones }}</td>
-                <td>
-                    <a href="/editar_cliente/{{ cliente.id }}" class="btn-edit">Editar Cliente</a>
-                    <form method="POST" action="/registrar_pago/{{ cliente.id }}" style="display:inline-block;">
-                        <input type="number" name="monto_pago" min="1" required style="width: 80px;">
-                        <input type="submit" value="Registrar Pago">
-                    </form>
-                </td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-        <p>No hay clientes registrados.</p>
-    {% endif %}
+        <form method="get" action="/inicio" class="mb-3 form-inline">
+            <input type="text" name="filtro" class="form-control" placeholder="Buscar por nombre" value="{{ request.args.get('filtro', '') }}">
+            <button type="submit" class="btn btn-primary">Filtrar</button>
+            <a href="/nuevo" class="btn btn-success">+ Nuevo Cliente</a>
+            <a href="/pagos" class="btn btn-info">Ver Pagos</a>
+            <a href="/logout" class="btn btn-secondary">Cerrar Sesión</a>
+        </form>
+
+        {% if clientes %}
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped">
+                <thead>
+                    <tr>
+                        <th>Fecha Prestada</th>
+                        <th>Nombre</th>
+                        <th>Monto Prestado</th>
+                        <th>Deuda Actual</th>
+                        <th>Observaciones</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cliente in clientes %}
+                    <tr>
+                        <td>{{ cliente.fecha }}</td>
+                        <td>{{ cliente.nombre }}</td>
+                        <td>${{ '%.2f' | format(cliente.monto) }}</td>
+                        <td>${{ '%.2f' | format(cliente.deuda) }}</td>
+                        <td>{{ cliente.observaciones }}</td>
+                        <td>
+                            <form action="/registrar_pago" method="POST" class="form-pago">
+                                <input type="hidden" name="cliente_id" value="{{ cliente.id }}">
+                                <input type="number" name="monto" step="0.01" placeholder="Pago" required>
+                                <button type="submit" class="btn btn-success btn-sm">Registrar</button>
+                                <a href="/pagos_cliente/{{ cliente.id }}" class="btn btn-info btn-sm">Ver pagos</a>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+            <div class="alert alert-warning">No hay clientes registrados.</div>
+        {% endif %}
+    </div>
 </body>
 </html>
