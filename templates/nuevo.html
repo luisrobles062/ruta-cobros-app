@@ -1,63 +1,44 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8" />
-    <title>Nuevo Cliente - Solo Ricuras</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <meta charset="UTF-8">
+    <title>Agregar Nuevo Cliente</title>
     <style>
-        body {
-            background-color: #f7f9fc;
-            padding: 30px;
+        body { font-family: Arial, sans-serif; background-color: #f1f1f1; }
+        .container {
+            max-width: 400px; margin: 50px auto; background: white; padding: 20px; border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
-        .form-container {
-            max-width: 600px;
-            margin: auto;
-            background: white;
-            padding: 25px;
-            border-radius: 8px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+        label { display: block; margin-top: 10px; }
+        input, textarea { width: 100%; padding: 8px; margin-top: 5px; border-radius: 4px; border: 1px solid #ccc; }
+        input[type="submit"] {
+            background-color: #28a745; color: white; border: none; cursor: pointer; margin-top: 15px; padding: 10px;
+            border-radius: 4px;
         }
-        .btn-submit {
-            background-color: #4a90e2;
-            border: none;
-        }
-        .btn-submit:hover {
-            background-color: #357ABD;
-        }
+        input[type="submit"]:hover { background-color: #218838; }
+        a { display: inline-block; margin-top: 15px; color: #333; text-decoration: none; }
+        a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
-    <div class="form-container">
-        <h2 class="mb-4 text-center">Agregar Nuevo Cliente</h2>
+    <div class="container">
+        <h2>Agregar Nuevo Cliente</h2>
+        <form method="POST" action="/nuevo">
+            <label for="nombre">Nombre:</label>
+            <input type="text" id="nombre" name="nombre" required>
 
-        {% if error %}
-        <div class="alert alert-danger">{{ error }}</div>
-        {% endif %}
+            <label for="deuda">Monto Prestado:</label>
+            <input type="number" id="deuda" name="deuda" step="0.01" required>
 
-        <form method="post" action="{{ url_for('nuevo') }}">
-            <div class="mb-3">
-                <label for="nombre" class="form-label">Nombre *</label>
-                <input type="text" id="nombre" name="nombre" class="form-control" value="{{ nombre or '' }}" required />
-            </div>
+            <label for="fecha_inicio">Fecha de Inicio:</label>
+            <input type="date" id="fecha_inicio" name="fecha_inicio" required>
 
-            <div class="mb-3">
-                <label for="fecha" class="form-label">Fecha</label>
-                <input type="date" id="fecha" name="fecha" class="form-control" value="{{ fecha or '' }}" />
-            </div>
+            <label for="observaciones">Observaciones:</label>
+            <textarea id="observaciones" name="observaciones" rows="3"></textarea>
 
-            <div class="mb-3">
-                <label for="monto" class="form-label">Monto *</label>
-                <input type="number" step="0.01" id="monto" name="monto" class="form-control" value="{{ monto or '' }}" required />
-            </div>
-
-            <div class="mb-3">
-                <label for="deuda" class="form-label">Deuda *</label>
-                <input type="number" step="0.01" id="deuda" name="deuda" class="form-control" value="{{ deuda or '' }}" required />
-            </div>
-
-            <button type="submit" class="btn btn-submit text-white w-100">Guardar Cliente</button>
-            <a href="{{ url_for('inicio') }}" class="btn btn-link mt-3 d-block text-center">Volver al inicio</a>
+            <input type="submit" value="Agregar Cliente">
         </form>
+        <a href="/inicio">Volver al listado</a>
     </div>
 </body>
 </html>
