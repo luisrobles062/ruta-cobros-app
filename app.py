@@ -1,19 +1,13 @@
 from flask import Flask, render_template, request, redirect, session
-import psycopg2
-from psycopg2.extras import RealDictCursor
+import sqlite3
 from datetime import datetime
+import urllib.parse
 
 app = Flask(__name__)
 app.secret_key = 'clave_secreta'
 
 def conectar_db():
-    conn = psycopg2.connect(
-        host="dpg-d21or4emcj7s73eqk1j0-a.oregon-postgres.render.com",
-        database="cobros_db_apyt",
-        user="cobros_user",
-        password="qf5rdhUywTUKi0qRFvtK2TQrgvaHtBjQ"
-    )
-    return conn
+    return sqlite3.connect('cobros.db')
 
 # ------------------ RUTAS ------------------
 
@@ -47,10 +41,11 @@ def inicio():
     filtro_nombre = request.args.get('filtro', '').strip()
 
     conn = conectar_db()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
 
     if filtro_nombre:
-        cursor.execute("SELECT * FROM clientes WHERE nombre ILIKE %s ORDER BY nombre ASC", ('%'+filtro_nombre+'%',))
+        cursor.execute("SELECT * FROM clientes WHERE nombre LIKE ? ORDER BY nombre ASC", ('%'+filtro_nombre+'%',))
     else:
         cursor.execute("SELECT * FROM clientes ORDER BY nombre ASC")
 
@@ -59,7 +54,7 @@ def inicio():
     pagos = []
     if filtro_nombre and clientes:
         cliente_id = clientes[0]['id']
-        cursor.execute("SELECT * FROM cobros WHERE cliente_id = %s ORDER BY fecha DESC", (cliente_id,))
+        cursor.execute("SELECT * FROM cobros WHERE cliente_id = ? ORDER BY fecha DESC", (cliente_id,))
         pagos = cursor.fetchall()
 
     conn.close()
@@ -80,7 +75,7 @@ def nuevo_cliente():
         conn = conectar_db()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO clientes (nombre, deuda, fecha_inicio, observaciones) VALUES (%s, %s, %s, %s)",
+            "INSERT INTO clientes (nombre, deuda, fecha_inicio, observaciones) VALUES (?, ?, ?, ?)",
             (nombre, deuda, fecha_inicio, observaciones)
         )
         conn.commit()
@@ -96,7 +91,8 @@ def editar_cliente(cliente_id):
         return redirect('/')
 
     conn = conectar_db()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
 
     if request.method == 'POST':
         nombre = request.form['nombre']
@@ -105,15 +101,16 @@ def editar_cliente(cliente_id):
         observaciones = request.form['observaciones']
 
         cursor.execute(
-            "UPDATE clientes SET nombre = %s, deuda = %s, fecha_inicio = %s, observaciones = %s WHERE id = %s",
+            "UPDATE clientes SET nombre = ?, deuda = ?, fecha_inicio = ?, observaciones = ? WHERE id = ?",
             (nombre, deuda, fecha_inicio, observaciones, cliente_id)
         )
         conn.commit()
         conn.close()
-        return redirect('/inicio?filtro=' + nombre)
+        filtro_url = urllib.parse.quote_plus(nombre)
+        return redirect('/inicio?filtro=' + filtro_url)
 
     else:
-        cursor.execute("SELECT * FROM clientes WHERE id = %s", (cliente_id,))
+        cursor.execute("SELECT * FROM clientes WHERE id = ?", (cliente_id,))
         cliente = cursor.fetchone()
         conn.close()
         if cliente:
@@ -134,15 +131,20 @@ def registrar_pago():
     conn = conectar_db()
     cursor = conn.cursor()
 
-    cursor.execute("UPDATE clientes SET deuda = deuda - %s WHERE id = %s", (monto, cliente_id))
+    cursor.execute("UPDATE clientes SET deuda = deuda - ? WHERE id = ?", (monto, cliente_id))
     cursor.execute(
-        "INSERT INTO cobros (cliente_id, monto, comentario, fecha) VALUES (%s, %s, %s, %s)",
+        "INSERT INTO cobros (cliente_id, monto, comentario, fecha) VALUES (?, ?, ?, ?)",
         (cliente_id, monto, comentario, datetime.now().strftime('%Y-%m-%d'))
     )
 
+    cursor.execute("SELECT nombre FROM clientes WHERE id = ?", (cliente_id,))
+    cliente = cursor.fetchone()
+    nombre_cliente = cliente[0] if cliente else ''
+
     conn.commit()
     conn.close()
-    return redirect('/inicio?filtro=' + str(cliente_id))
+    filtro_url = urllib.parse.quote_plus(nombre_cliente)
+    return redirect('/inicio?filtro=' + filtro_url)
 
 # Editar pago
 @app.route('/editar_pago/<int:pago_id>', methods=['GET', 'POST'])
@@ -151,33 +153,39 @@ def editar_pago(pago_id):
         return redirect('/')
 
     conn = conectar_db()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
 
     if request.method == 'POST':
         nuevo_monto = float(request.form['monto'])
         nuevo_comentario = request.form.get('comentario', '')
 
-        cursor.execute("SELECT cliente_id, monto FROM cobros WHERE id = %s", (pago_id,))
+        cursor.execute("SELECT cliente_id, monto FROM cobros WHERE id = ?", (pago_id,))
         pago = cursor.fetchone()
 
         if pago:
             cliente_id = pago['cliente_id']
             monto_anterior = pago['monto']
 
-            cursor.execute("UPDATE cobros SET monto = %s, comentario = %s WHERE id = %s", (nuevo_monto, nuevo_comentario, pago_id))
+            cursor.execute("UPDATE cobros SET monto = ?, comentario = ? WHERE id = ?", (nuevo_monto, nuevo_comentario, pago_id))
 
             diferencia = monto_anterior - nuevo_monto
-            cursor.execute("UPDATE clientes SET deuda = deuda + %s WHERE id = %s", (diferencia, cliente_id))
+            cursor.execute("UPDATE clientes SET deuda = deuda + ? WHERE id = ?", (diferencia, cliente_id))
+
+            cursor.execute("SELECT nombre FROM clientes WHERE id = ?", (cliente_id,))
+            cliente = cursor.fetchone()
+            nombre_cliente = cliente[0] if cliente else ''
 
             conn.commit()
             conn.close()
-            return redirect('/inicio?filtro=' + str(cliente_id))
+            filtro_url = urllib.parse.quote_plus(nombre_cliente)
+            return redirect('/inicio?filtro=' + filtro_url)
         else:
             conn.close()
             return "Pago no encontrado", 404
 
     else:
-        cursor.execute("SELECT * FROM cobros WHERE id = %s", (pago_id,))
+        cursor.execute("SELECT * FROM cobros WHERE id = ?", (pago_id,))
         pago = cursor.fetchone()
         conn.close()
         if pago:
@@ -196,19 +204,24 @@ def eliminar_pago():
     conn = conectar_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT cliente_id, monto FROM cobros WHERE id = %s", (pago_id,))
+    cursor.execute("SELECT cliente_id, monto FROM cobros WHERE id = ?", (pago_id,))
     pago = cursor.fetchone()
 
     if pago:
         cliente_id = pago[0]
         monto = pago[1]
 
-        cursor.execute("DELETE FROM cobros WHERE id = %s", (pago_id,))
-        cursor.execute("UPDATE clientes SET deuda = deuda + %s WHERE id = %s", (monto, cliente_id))
+        cursor.execute("DELETE FROM cobros WHERE id = ?", (pago_id,))
+        cursor.execute("UPDATE clientes SET deuda = deuda + ? WHERE id = ?", (monto, cliente_id))
+
+        cursor.execute("SELECT nombre FROM clientes WHERE id = ?", (cliente_id,))
+        cliente = cursor.fetchone()
+        nombre_cliente = cliente[0] if cliente else ''
 
         conn.commit()
         conn.close()
-        return redirect('/inicio?filtro=' + str(cliente_id))
+        filtro_url = urllib.parse.quote_plus(nombre_cliente)
+        return redirect('/inicio?filtro=' + filtro_url)
     else:
         conn.close()
         return "Pago no encontrado", 404
@@ -220,7 +233,7 @@ if __name__ == '__main__':
     cursor = conn.cursor()
 
     cursor.execute('''CREATE TABLE IF NOT EXISTS clientes (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         nombre TEXT,
         deuda REAL,
         fecha_inicio TEXT,
@@ -228,11 +241,11 @@ if __name__ == '__main__':
     )''')
 
     cursor.execute('''CREATE TABLE IF NOT EXISTS cobros (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         cliente_id INTEGER,
         monto REAL,
         comentario TEXT,
-        fecha DATE DEFAULT CURRENT_DATE
+        fecha TEXT DEFAULT (date('now'))
     )''')
 
     conn.commit()
