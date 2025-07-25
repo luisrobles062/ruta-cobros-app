@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <title>Iniciar sesión</title>
     <style>
         body {
@@ -18,6 +18,7 @@
             padding: 40px;
             border-radius: 12px;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            width: 320px;
         }
 
         h2 {
@@ -31,6 +32,7 @@
             margin: 10px 0;
             border: 1px solid #ccc;
             border-radius: 6px;
+            box-sizing: border-box;
         }
 
         input[type="submit"] {
@@ -58,15 +60,17 @@
 <body>
     <div class="login-container">
         <h2>Iniciar sesión</h2>
-
-        {% if error %}
-            <p class="error">{{ error }}</p>
-        {% endif %}
-
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <p class="{{ category }}">{{ message }}</p>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
         <form action="/" method="POST">
-            <input type="text" name="usuario" placeholder="Usuario" required>
-            <input type="password" name="clave" placeholder="Contraseña" required>
-            <input type="submit" value="Entrar">
+            <input type="text" name="usuario" placeholder="Usuario" required />
+            <input type="password" name="clave" placeholder="Contraseña" required />
+            <input type="submit" value="Entrar" />
         </form>
     </div>
 </body>
