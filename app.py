@@ -34,7 +34,7 @@ def logout():
 # Inicio - mostrar todos los clientes y pagos filtrados
 @app.route('/inicio')
 def inicio():
-    if not session.get('usuario):
+    if not session.get('usuario'):
         return redirect('/')
 
     filtro_nombre = request.args.get('filtro', '').strip()
@@ -53,7 +53,7 @@ def inicio():
     pagos = []
     if filtro_nombre and clientes:
         cliente_id = clientes[0]['id']
-        cursor.execute("SELECT * FROM cobros WHERE cliente_id = ? ORDER BY fecha DESC", (cliente_id,))
+        cursor.execute("SELECT * FROM pagos WHERE cliente_id = ? ORDER BY fecha DESC", (cliente_id,))
         pagos = cursor.fetchall()
 
     conn.close()
@@ -96,20 +96,71 @@ def registrar_pago():
     conn = conectar_db()
     cursor = conn.cursor()
 
-    # Actualiza deuda
     cursor.execute("UPDATE clientes SET deuda = deuda - ? WHERE id = ?", (monto, cliente_id))
 
-    # Guarda en tabla 'cobros'
     cursor.execute(
         "INSERT INTO cobros (cliente_id, monto, comentario, fecha) VALUES (?, ?, ?, ?)",
         (cliente_id, monto, comentario, datetime.now().strftime('%Y-%m-%d'))
     )
 
-    # También guarda en la nueva tabla 'pagos'
     cursor.execute(
         "INSERT INTO pagos (cliente_id, fecha, monto) VALUES (?, ?, ?)",
         (cliente_id, datetime.now().strftime('%Y-%m-%d'), monto)
     )
+
+    conn.commit()
+    conn.close()
+    return redirect('/inicio')
+
+# Editar pago
+@app.route('/editar_pago', methods=['POST'])
+def editar_pago():
+    if not session.get('usuario'):
+        return redirect('/')
+
+    pago_id = request.form['pago_id']
+    nuevo_monto = float(request.form['nuevo_monto'])
+
+    conn = conectar_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT cliente_id, monto FROM pagos WHERE id = ?", (pago_id,))
+    pago = cursor.fetchone()
+    if pago is None:
+        conn.close()
+        return "Pago no encontrado", 404
+
+    cliente_id, monto_viejo = pago
+    diferencia = nuevo_monto - monto_viejo
+
+    cursor.execute("UPDATE pagos SET monto = ? WHERE id = ?", (nuevo_monto, pago_id))
+    cursor.execute("UPDATE clientes SET deuda = deuda - ? WHERE id = ?", (diferencia, cliente_id))
+
+    conn.commit()
+    conn.close()
+    return redirect('/inicio')
+
+# Eliminar pago
+@app.route('/eliminar_pago', methods=['POST'])
+def eliminar_pago():
+    if not session.get('usuario'):
+        return redirect('/')
+
+    pago_id = request.form['pago_id']
+
+    conn = conectar_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT cliente_id, monto FROM pagos WHERE id = ?", (pago_id,))
+    pago = cursor.fetchone()
+    if pago is None:
+        conn.close()
+        return "Pago no encontrado", 404
+
+    cliente_id, monto = pago
+
+    cursor.execute("DELETE FROM pagos WHERE id = ?", (pago_id,))
+    cursor.execute("UPDATE clientes SET deuda = deuda + ? WHERE id = ?", (monto, cliente_id))
 
     conn.commit()
     conn.close()
@@ -137,7 +188,6 @@ if __name__ == '__main__':
         fecha TEXT DEFAULT (date('now'))
     )''')
 
-    # Nueva tabla para registrar los pagos con más control
     cursor.execute('''CREATE TABLE IF NOT EXISTS pagos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         cliente_id INTEGER,
