@@ -14,7 +14,7 @@
             color: white;
         }
         .table-striped tbody tr:nth-of-type(odd) {
-            background-color: #d9eaff;
+            background-color: #e3efff;
         }
         .header-title {
             color: #2c3e50;
@@ -26,7 +26,18 @@
         .alert-info {
             max-width: 600px;
         }
+        .delete-btn {
+            color: red;
+            cursor: pointer;
+        }
     </style>
+    <script>
+        function confirmarEliminacion(id) {
+            if (confirm("¿Estás seguro de eliminar este pago?")) {
+                window.location.href = "/eliminar_pago/" + id;
+            }
+        }
+    </script>
 </head>
 <body>
     <div class="container">
@@ -42,6 +53,7 @@
                     <th>Cliente</th>
                     <th>Monto</th>
                     <th>Fecha</th>
+                    <th>Acción</th>
                 </tr>
             </thead>
             <tbody>
@@ -49,8 +61,9 @@
                 <tr>
                     <td>{{ pago['id'] }}</td>
                     <td>{{ pago['nombre'] }}</td>
-                    <td>${{ '%.2f' | format(pago['monto']) }}</td>
-                    <td>{{ pago['fecha'] }}</td>
+                    <td>${{ "{:,.2f}".format(pago['monto']) }}</td>
+                    <td>{{ pago['fecha'].strftime('%d/%m/%Y %H:%M') if pago['fecha'] else '' }}</td>
+                    <td><span class="delete-btn" onclick="confirmarEliminacion({{ pago['id'] }})">🗑️</span></td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -58,7 +71,6 @@
         {% else %}
         <div class="alert alert-info">No hay pagos registrados aún.</div>
         {% endif %}
-
     </div>
 </body>
 </html>
