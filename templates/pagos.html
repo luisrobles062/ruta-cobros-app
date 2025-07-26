@@ -1,18 +1,13 @@
 {% extends "base.html" %}
 
-{% block titulo %}Pagos - Ruta de Cobro{% endblock %}
+{% block titulo %}Pagos de {{ cliente.nombre }} - Ruta de Cobro{% endblock %}
 
 {% block contenido %}
-<h2>Pagos Registrados</h2>
+<h2>Pagos de {{ cliente.nombre }}</h2>
 
-<a href="{{ url_for('inicio') }}" class="btn btn-secondary mb-3">← Volver a Clientes</a>
-
-{% if pagos %}
 <table class="table table-bordered table-striped">
     <thead class="table-primary">
         <tr>
-            <th>ID Pago</th>
-            <th>Cliente</th>
             <th>Monto</th>
             <th>Fecha</th>
         </tr>
@@ -20,15 +15,12 @@
     <tbody>
         {% for pago in pagos %}
         <tr>
-            <td>{{ pago.id }}</td>
-            <td>{{ pago.nombre }}</td>
             <td>${{ '%.2f' | format(pago.monto) }}</td>
             <td>{{ pago.fecha }}</td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
-{% else %}
-<div class="alert alert-info">No hay pagos registrados aún.</div>
-{% endif %}
+
+<a href="{{ url_for('inicio') }}" class="btn btn-secondary">← Volver a Clientes</a>
 {% endblock %}
