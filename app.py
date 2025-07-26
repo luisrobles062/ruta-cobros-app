@@ -1,170 +1,100 @@
 from flask import Flask, render_template, request, redirect, session, url_for
 import psycopg2
-from psycopg2.extras import RealDictCursor
+import psycopg2.extras
+import os
 from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = 'clave_secreta'
 
-# Configuración de conexión a PostgreSQL en Render
-DB_URL = 'postgresql://cobros_user:qf5rdhUywTUKi0qRFvtK2TQrgvaHtBjQ@dpg-d21or4emcj7s73eqk1j0-a.oregon-postgres.render.com/cobros_db_apyt'
+# Conexión a PostgreSQL usando la variable de entorno DATABASE_URL
+DATABASE_URL = os.getenv('DATABASE_URL')
 
-def get_db_connection():
-    return psycopg2.connect(DB_URL, cursor_factory=RealDictCursor)
+def obtener_conexion():
+    return psycopg2.connect(DATABASE_URL, sslmode='require')
 
+# =================== LOGIN ====================
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        if request.form['usuario'] == 'admin' and request.form['contrasena'] == 'admin':
-            session['usuario'] = 'admin'
-            return redirect('/inicio')
+        if request.form['usuario'] == 'admin' and request.form['password'] == 'admin':
+            session['usuario'] = request.form['usuario']
+            return redirect(url_for('inicio'))
         else:
-            return render_template('login.html', error='Credenciales incorrectas')
+            return render_template('login.html', error='Credenciales inválidas')
     return render_template('login.html')
 
 @app.route('/logout')
 def logout():
-    session.pop('usuario', None)
-    return redirect('/')
+    session.clear()
+    return redirect(url_for('login'))
 
+# =================== INICIO ====================
 @app.route('/inicio')
 def inicio():
     if 'usuario' not in session:
-        return redirect('/')
+        return redirect(url_for('login'))
 
     filtro = request.args.get('filtro', '')
-    conn = get_db_connection()
-    cursor = conn.cursor()
+
+    conn = obtener_conexion()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
     if filtro:
-        cursor.execute("SELECT * FROM clientes WHERE nombre ILIKE %s ORDER BY nombre", ('%' + filtro + '%',))
+        cur.execute("SELECT * FROM clientes WHERE nombre ILIKE %s ORDER BY id", ('%' + filtro + '%',))
     else:
-        cursor.execute("SELECT * FROM clientes ORDER BY nombre")
+        cur.execute("SELECT * FROM clientes ORDER BY id")
+    clientes = cur.fetchall()
 
-    clientes = cursor.fetchall()
+    cur.execute("SELECT SUM(deuda_actual) FROM clientes")
+    total_deuda = cur.fetchone()[0] or 0
+
     conn.close()
-    return render_template('inicio.html', clientes=clientes)
+    return render_template('inicio.html', clientes=clientes, filtro=filtro, total_deuda=total_deuda)
 
-@app.route('/inicio_test')
-def inicio_test():
-    # Ruta de prueba para mostrar logo simple centrado
-    return render_template('inicio_logo.html')
-
+# =================== NUEVO CLIENTE ====================
 @app.route('/nuevo', methods=['GET', 'POST'])
 def nuevo():
     if 'usuario' not in session:
-        return redirect('/')
-    
+        return redirect(url_for('login'))
+
     if request.method == 'POST':
         fecha = request.form['fecha']
         nombre = request.form['nombre']
         monto = float(request.form['monto'])
-        porcentaje = float(request.form['porcentaje'])
+        interes = float(request.form['interes'])
+        deuda = float(request.form['deuda'])
         observaciones = request.form['observaciones']
 
-        deuda = monto + (monto * porcentaje / 100)
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO clientes (fecha, nombre, monto, porcentaje, deuda, observaciones)
+        conn = obtener_conexion()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO clientes (fecha, nombre, monto, interes, deuda_actual, observaciones)
             VALUES (%s, %s, %s, %s, %s, %s)
-        """, (fecha, nombre, monto, porcentaje, deuda, observaciones))
+        """, (fecha, nombre, monto, interes, deuda, observaciones))
         conn.commit()
         conn.close()
-        return redirect('/inicio')
+        return redirect(url_for('inicio'))
 
-    return render_template('nuevo.html')
+    return render_template('nuevo_cliente.html')
 
-@app.route('/registrar_pago', methods=['POST'])
-def registrar_pago():
+# =================== REGISTRAR PAGO ====================
+@app.route('/pago/<int:cliente_id>', methods=['POST'])
+def pago(cliente_id):
     if 'usuario' not in session:
-        return redirect('/')
+        return redirect(url_for('login'))
 
-    cliente_id = request.form['cliente_id']
-    monto_pago = float(request.form['monto'])
+    pago = float(request.form['pago'])
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    # Actualizar deuda
-    cursor.execute("UPDATE clientes SET deuda = deuda - %s WHERE id = %s", (monto_pago, cliente_id))
-    # Registrar pago
-    cursor.execute("""
-        INSERT INTO historial_pagos (cliente_id, pago, fecha_pago)
-        VALUES (%s, %s, NOW())
-    """, (cliente_id, monto_pago))
-
+    conn = obtener_conexion()
+    cur = conn.cursor()
+    cur.execute("UPDATE clientes SET deuda_actual = deuda_actual - %s WHERE id = %s", (pago, cliente_id))
+    cur.execute("INSERT INTO historial_pagos (cliente_id, pago, fecha_pago) VALUES (%s, %s, %s)",
+                (cliente_id, pago, datetime.now()))
     conn.commit()
     conn.close()
-    return redirect('/inicio')
+    return redirect(url_for('inicio'))
 
-@app.route('/pagos')
-def pagos():
-    if 'usuario' not in session:
-        return redirect('/')
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT h.id, c.nombre, h.pago AS monto, h.fecha_pago AS fecha
-        FROM historial_pagos h
-        JOIN clientes c ON h.cliente_id = c.id
-        ORDER BY h.fecha_pago DESC
-    """)
-    pagos = cursor.fetchall()
-    conn.close()
-
-    return render_template('pagos.html', pagos=pagos)
-
-@app.route('/pagos_cliente/<int:cliente_id>')
-def pagos_cliente(cliente_id):
-    if 'usuario' not in session:
-        return redirect('/')
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT nombre FROM clientes WHERE id = %s", (cliente_id,))
-    cliente = cursor.fetchone()
-
-    cursor.execute("""
-        SELECT id, pago AS monto, fecha_pago AS fecha
-        FROM historial_pagos
-        WHERE cliente_id = %s
-        ORDER BY fecha_pago DESC
-    """, (cliente_id,))
-    pagos = cursor.fetchall()
-    conn.close()
-
-    return render_template('pagos_cliente.html', pagos=pagos, cliente=cliente)
-
-@app.route('/eliminar_pago/<int:pago_id>', methods=['POST'])
-def eliminar_pago(pago_id):
-    if 'usuario' not in session:
-        return redirect('/')
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    # Obtener el monto y cliente del pago a eliminar
-    cursor.execute("SELECT cliente_id, pago FROM historial_pagos WHERE id = %s", (pago_id,))
-    pago = cursor.fetchone()
-
-    if pago:
-        cliente_id = pago['cliente_id']
-        monto = pago['pago']
-
-        # Eliminar el pago del historial
-        cursor.execute("DELETE FROM historial_pagos WHERE id = %s", (pago_id,))
-        # Revertir el pago sumándolo de nuevo a la deuda
-        cursor.execute("UPDATE clientes SET deuda = deuda + %s WHERE id = %s", (monto, cliente_id))
-
-        conn.commit()
-
-    conn.close()
-    return redirect(f'/pagos_cliente/{cliente_id}')
-
+# =================== EJECUCIÓN ====================
 if __name__ == '__main__':
     app.run(debug=True)
