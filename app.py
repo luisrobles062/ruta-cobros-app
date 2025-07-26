@@ -134,3 +134,29 @@ def pagos_cliente(cliente_id):
     conn.close()
 
     return render_template('pagos_cliente.html', pagos=pagos, cliente=cliente)
+
+@app.route('/eliminar_pago/<int:pago_id>', methods=['POST'])
+def eliminar_pago(pago_id):
+    if 'usuario' not in session:
+        return redirect('/')
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Obtener el monto y cliente del pago a eliminar
+    cursor.execute("SELECT cliente_id, pago FROM historial_pagos WHERE id = %s", (pago_id,))
+    pago = cursor.fetchone()
+
+    if pago:
+        cliente_id = pago['cliente_id']
+        monto = pago['pago']
+
+        # Eliminar el pago del historial
+        cursor.execute("DELETE FROM historial_pagos WHERE id = %s", (pago_id,))
+        # Revertir el pago sumándolo de nuevo a la deuda
+        cursor.execute("UPDATE clientes SET deuda = deuda + %s WHERE id = %s", (monto, cliente_id))
+
+        conn.commit()
+
+    conn.close()
+    return redirect(f'/pagos_cliente/{cliente_id}')
