@@ -1,46 +1,118 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Inicio - Ruta de Cobro</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background-color: #f2f2f2;
+        }
+        h1 {
+            text-align: center;
+        }
+        .logo {
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 30px;
+        }
+        .filtro {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .filtro input {
+            padding: 6px;
+            font-size: 16px;
+        }
+        .total-deuda {
+            text-align: right;
+            font-size: 18px;
+            font-weight: bold;
+            margin: 10px 0 20px;
+            color: #c0392b;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+        }
+        th, td {
+            padding: 10px;
+            border: 1px solid #ccc;
+            text-align: center;
+        }
+        form {
+            margin: 0;
+        }
+        .pago-input {
+            width: 70px;
+        }
+        .btn-pago {
+            padding: 4px 8px;
+        }
+        .acciones {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .acciones a {
+            text-decoration: none;
+            color: white;
+            background-color: #2980b9;
+            padding: 8px 14px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
 
-{% block titulo %}Inicio - Ruta de Cobro{% endblock %}
+    <div class="logo">RUTA DE COBRO LUIS ROBLES</div>
 
-{% block contenido %}
-<h2>Listado de Clientes</h2>
+    <h1>Lista de Clientes</h1>
 
-<form method="get" class="mb-3">
-    <input type="text" name="filtro" class="form-control" placeholder="Buscar por nombre..." value="{{ request.args.get('filtro', '') }}">
-</form>
+    <div class="acciones">
+        <form action="{{ url_for('inicio') }}" method="get" class="filtro">
+            <input type="text" name="filtro" placeholder="Filtrar por nombre" value="{{ filtro }}">
+            <button type="submit">Buscar</button>
+        </form>
+        <a href="{{ url_for('nuevo') }}">➕ Nuevo Cliente</a>
+    </div>
 
-<table class="table table-bordered table-striped">
-    <thead class="table-primary">
-        <tr>
-            <th>Fecha</th>
-            <th>Nombre</th>
-            <th>Monto Prestado</th>
-            <th>Deuda Actual</th>
-            <th>Pago</th>
-            <th>Acción</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for cliente in clientes %}
-        <tr>
-            <td>{{ cliente.fecha }}</td>
-            <td>{{ cliente.nombre }}</td>
-            <td>${{ '%.2f' | format(cliente.monto_prestado) }}</td>
-            <td>${{ '%.2f' | format(cliente.deuda_actual) }}</td>
-            <td>
-                <form method="post" action="{{ url_for('registrar_pago', cliente_id=cliente.id) }}">
-                    <input type="number" name="monto_pago" class="form-control" step="0.01" required>
-            </td>
-            <td>
-                    <button type="submit" class="btn btn-success btn-sm">Registrar</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+    <div class="total-deuda">💰 Total Deuda Actual: ${{ '{:,.2f}'.format(total_deuda) }}</div>
 
-<a href="{{ url_for('ver_pagos') }}" class="btn btn-primary">Ver Pagos</a>
-<a href="{{ url_for('nuevo_cliente') }}" class="btn btn-secondary">Nuevo Cliente</a>
-<a href="{{ url_for('logout') }}" class="btn btn-danger float-end">Cerrar Sesión</a>
-{% endblock %}
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Nombre</th>
+                <th>Monto Prestado</th>
+                <th>% Interés</th>
+                <th>Deuda Actual</th>
+                <th>Observaciones</th>
+                <th>Registrar Pago</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cliente in clientes %}
+            <tr>
+                <td>{{ cliente.fecha }}</td>
+                <td>{{ cliente.nombre }}</td>
+                <td>${{ '{:,.2f}'.format(cliente.monto) }}</td>
+                <td>{{ cliente.interes }}%</td>
+                <td>${{ '{:,.2f}'.format(cliente.deuda_actual) }}</td>
+                <td>{{ cliente.observaciones or '' }}</td>
+                <td>
+                    <form action="{{ url_for('pago', cliente_id=cliente.id) }}" method="post">
+                        <input class="pago-input" type="number" name="pago" min="0" step="0.01" required>
+                        <button class="btn-pago" type="submit">💵 Pagar</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+</body>
+</html>
