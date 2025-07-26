@@ -45,6 +45,11 @@ def inicio():
     conn.close()
     return render_template('inicio.html', clientes=clientes)
 
+@app.route('/inicio_test')
+def inicio_test():
+    # Ruta de prueba para mostrar logo simple centrado
+    return render_template('inicio_logo.html')
+
 @app.route('/nuevo', methods=['GET', 'POST'])
 def nuevo():
     if 'usuario' not in session:
@@ -160,3 +165,6 @@ def eliminar_pago(pago_id):
 
     conn.close()
     return redirect(f'/pagos_cliente/{cliente_id}')
+
+if __name__ == '__main__':
+    app.run(debug=True)
