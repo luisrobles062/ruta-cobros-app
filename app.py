@@ -6,16 +6,13 @@ from datetime import datetime
 app = Flask(__name__)
 app.secret_key = 'clave_secreta'
 
-# Conexión a la base de datos PostgreSQL en Render
+# Conexión a la base de datos PostgreSQL en Neon
 def get_db_connection():
-    return psycopg2.connect(
-        dbname='cobros_db_apyt',
-        user='cobros_user',
-        password='qf5rdhUywTUKi0qRFvtK2TQrgvaHtBjQ',
-        host='dpg-d21or4emcj7s73eqk1j0-a.oregon-postgres.render.com',
-        port='5432',
+    conn = psycopg2.connect(
+        "dbname=neondb user=neondb_owner password=npg_CwJqDX7z9AaO host=ep-cold-meadow-acvlsfm5-pooler.sa-east-1.aws.neon.tech port=5432 sslmode=require",
         cursor_factory=RealDictCursor
     )
+    return conn
 
 # Ruta de inicio de sesión
 @app.route('/', methods=['GET', 'POST'])
@@ -38,21 +35,21 @@ def logout():
 def inicio():
     if 'usuario' not in session:
         return redirect('/')
-    
+
     filtro = request.args.get('filtro', '')
     conn = get_db_connection()
     cur = conn.cursor()
-    
+
     if filtro:
         cur.execute("SELECT * FROM clientes WHERE nombre ILIKE %s ORDER BY id DESC", (f'%{filtro}%',))
     else:
         cur.execute("SELECT * FROM clientes ORDER BY id DESC")
-    
+
     clientes = cur.fetchall()
-    
+
     cur.execute("SELECT * FROM pagos ORDER BY fecha DESC")
     pagos = cur.fetchall()
-    
+
     conn.close()
     return render_template('inicio.html', clientes=clientes, pagos=pagos, filtro=filtro)
 
@@ -61,78 +58,10 @@ def inicio():
 def nuevo_cliente():
     if 'usuario' not in session:
         return redirect('/')
-    
+
     if request.method == 'POST':
         nombre = request.form['nombre']
         monto_prestado = float(request.form['monto_prestado'])
         porcentaje = float(request.form['porcentaje'])
         deuda_actual = monto_prestado + (monto_prestado * porcentaje / 100)
-        fecha = datetime.now().strftime('%Y-%m-%d')
-
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute('''
-            INSERT INTO clientes (fecha, nombre, monto_prestado, porcentaje, deuda_actual)
-            VALUES (%s, %s, %s, %s, %s)
-        ''', (fecha, nombre, monto_prestado, porcentaje, deuda_actual))
-        conn.commit()
-        conn.close()
-
-        return redirect('/inicio')
-    return render_template('nuevo_cliente.html')
-
-# Registrar un pago
-@app.route('/pagar/<int:cliente_id>', methods=['POST'])
-def pagar(cliente_id):
-    monto = float(request.form['monto_pago'])
-    fecha = datetime.now().strftime('%Y-%m-%d')
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    # Registrar el pago en la tabla pagos
-    cur.execute('''
-        INSERT INTO pagos (cliente_id, fecha, monto)
-        VALUES (%s, %s, %s)
-    ''', (cliente_id, fecha, monto))
-
-    # Actualizar la deuda del cliente
-    cur.execute('''
-        UPDATE clientes SET deuda_actual = deuda_actual - %s WHERE id = %s
-    ''', (monto, cliente_id))
-
-    conn.commit()
-    conn.close()
-    return redirect('/inicio')
-
-# Crear tablas si no existen (opcional)
-def crear_tablas():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS clientes (
-            id SERIAL PRIMARY KEY,
-            fecha DATE,
-            nombre TEXT,
-            monto_prestado NUMERIC,
-            porcentaje NUMERIC,
-            deuda_actual NUMERIC
-        );
-    ''')
-
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS pagos (
-            id SERIAL PRIMARY KEY,
-            cliente_id INTEGER REFERENCES clientes(id),
-            fecha DATE,
-            monto NUMERIC
-        );
-    ''')
-    
-    conn.commit()
-    conn.close()
-
-if __name__ == '__main__':
-    crear_tablas()
-    app.run(debug=True)
+        fecha = datetime.now().s
