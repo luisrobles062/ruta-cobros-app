@@ -104,4 +104,9 @@ def pagar():
     return redirect('/inicio')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    try:
+        print("Iniciando la aplicación Flask...")
+        app.run(debug=True)
+    except Exception as e:
+        print("Error al iniciar la app:", e)
+        input("Presiona Enter para salir...")
