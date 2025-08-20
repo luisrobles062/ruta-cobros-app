@@ -1,21 +1,31 @@
 {% extends "base.html" %}
 
 {% block contenido %}
-<div class="container">
-    <h2>Login</h2>
-    {% if error %}
-    <p style="color:red;">{{ error }}</p>
+<div class="container" style="max-width: 420px; margin-top: 2rem;">
+  <h2>Login</h2>
+
+  {# Mensajes flash del backend #}
+  {% with mensajes = get_flashed_messages() %}
+    {% if mensajes %}
+      <ul style="color: #b00020; padding-left: 1rem;">
+        {% for m in mensajes %}
+          <li>{{ m }}</li>
+        {% endfor %}
+      </ul>
     {% endif %}
-    <form method="POST" action="{{ url_for('login') }}">
-        <div>
-            <label>Usuario:</label>
-            <input type="text" name="usuario" required>
-        </div>
-        <div>
-            <label>Contraseña:</label>
-            <input type="password" name="contraseña" required>
-        </div>
-        <button type="submit">Ingresar</button>
-    </form>
+  {% endwith %}
+
+  <form method="POST" action="{{ url_for('login') }}" novalidate>
+    <div style="margin-bottom: .75rem;">
+      <label for="usuario">Usuario:</label>
+      <input id="usuario" type="text" name="usuario" required autocomplete="username" style="width:100%;">
+    </div>
+    <div style="margin-bottom: 1rem;">
+      <label for="contrasena">Contraseña:</label>
+      <!-- OJO: name="contrasena" SIN tilde para que coincida con app.py -->
+      <input id="contrasena" type="password" name="contrasena" required autocomplete="current-password" style="width:100%;">
+    </div>
+    <button type="submit">Ingresar</button>
+  </form>
 </div>
 {% endblock %}
