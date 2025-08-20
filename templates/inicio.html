@@ -3,61 +3,33 @@
 {% block titulo %}Inicio - Ruta de Cobro{% endblock %}
 
 {% block contenido %}
-<h2 class="mb-4">Clientes Registrados</h2>
-
-{% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-        {% for category, message in messages %}
-            <div class="alert alert-{{ category }}">{{ message }}</div>
-        {% endfor %}
-    {% endif %}
-{% endwith %}
-
-<div class="mb-3">
-    <input type="text" id="filtro" class="form-control" placeholder="Filtrar por nombre...">
-</div>
-
-<table class="table table-striped" id="tabla-clientes">
-    <thead class="table-primary">
+<h2 class="mb-4">Clientes</h2>
+<table class="table table-striped">
+    <thead>
         <tr>
             <th>ID</th>
-            <th>Fecha</th>
             <th>Nombre</th>
-            <th>Monto Prestado</th>
-            <th>Porcentaje</th>
-            <th>Deuda Actual</th>
-            <th>Pago</th>
+            <th>Teléfono</th>
+            <th>Documento</th>
+            <th>Fecha de Registro</th>
         </tr>
     </thead>
     <tbody>
-        {% for c in clientes %}
+        {% for cliente in clientes %}
         <tr>
-            <td>{{ c.id }}</td>
-            <td>{{ c.fecha }}</td>
-            <td>{{ c.nombre }}</td>
-            <td>{{ c.monto_prestado }}</td>
-            <td>{{ c.porcentaje }}%</td>
-            <td>{{ c.deuda_actual }}</td>
-            <td>
-                <form method="post" action="{{ url_for('registrar_pago', cliente_id=c.id) }}">
-                    <input type="number" step="0.01" name="pago" class="form-control mb-1" placeholder="Monto">
-                    <button type="submit" class="btn btn-success btn-sm w-100">Registrar</button>
-                </form>
-            </td>
+            <td>{{ cliente.id }}</td>
+            <td>{{ cliente.nombre }}</td>
+            <td>{{ cliente.telefono }}</td>
+            <td>{{ cliente.documento }}</td>
+            <td>{{ cliente.fecha_registro }}</td>
         </tr>
         {% endfor %}
+        {% if clientes|length == 0 %}
+        <tr>
+            <td colspan="5" class="text-center">No hay clientes registrados</td>
+        </tr>
+        {% endif %}
     </tbody>
 </table>
-
-<script>
-// Filtrar tabla por nombre
-document.getElementById('filtro').addEventListener('input', function() {
-    let filtro = this.value.toLowerCase();
-    let filas = document.querySelectorAll('#tabla-clientes tbody tr');
-    filas.forEach(fila => {
-        let nombre = fila.cells[2].textContent.toLowerCase();
-        fila.style.display = nombre.includes(filtro) ? '' : 'none';
-    });
-});
-</script>
+<a href="{{ url_for('nuevo') }}" class="btn btn-success">Agregar Nuevo Cliente</a>
 {% endblock %}
