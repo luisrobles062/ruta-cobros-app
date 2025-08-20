@@ -58,40 +58,50 @@ def inicio():
         fecha_efectivo = request.form.get("fecha_efectivo") or datetime.today().strftime('%Y-%m-%d')
         monto_efectivo = request.form.get("monto_efectivo")
         if monto_efectivo:
-            cur.execute("""
-                INSERT INTO efectivo_diario (fecha, monto)
-                VALUES (%s, %s);
-            """, (fecha_efectivo, monto_efectivo))
-            conn.commit()
-            flash("Efectivo diario registrado correctamente")
+            try:
+                monto_efectivo = float(monto_efectivo)
+                cur.execute("""
+                    INSERT INTO efectivo_diario (fecha, monto)
+                    VALUES (%s, %s);
+                """, (fecha_efectivo, monto_efectivo))
+                conn.commit()
+                flash("Efectivo diario registrado correctamente")
+            except Exception as e:
+                flash(f"Error al registrar efectivo: {e}")
 
     # Traer clientes
     cur.execute("SELECT * FROM clientes ORDER BY id ASC;")
     clientes = cur.fetchall()
 
-    # Calcular deuda actual de cada cliente (monto prestado - suma pagos)
-    for cliente in clientes:
+    # Calcular deuda actual de cada cliente
+    clientes_list = []
+    for c in clientes:
+        cliente = dict(c)
         cur.execute("SELECT COALESCE(SUM(monto),0) as total_pagos FROM pagos WHERE cliente_id=%s;", (cliente['id'],))
         pagos_cliente = cur.fetchone()
-        cliente['deuda_actual'] = float(cliente['monto_prestado']) - float(pagos_cliente['total_pagos'])
+        total_pagos = float(pagos_cliente['total_pagos']) if pagos_cliente else 0
+        deuda = float(cliente['monto_prestado']) - total_pagos
+        cliente['deuda_actual'] = deuda
+        clientes_list.append(cliente)
 
     # Total de deudas
-    total_deuda = sum([c['deuda_actual'] for c in clientes])
+    total_deuda = sum([c['deuda_actual'] for c in clientes_list])
 
     # Efectivo diario
     cur.execute("SELECT * FROM efectivo_diario ORDER BY fecha DESC;")
     efectivo_diario = cur.fetchall()
 
     # Total de efectivo diario
-    total_efectivo = sum([e['monto'] for e in efectivo_diario])
+    total_efectivo = sum([float(e['monto']) for e in efectivo_diario]) if efectivo_diario else 0
 
     # Total combinado deuda + efectivo
     total_combinado = total_deuda + total_efectivo
 
     cur.close()
     conn.close()
+
     return render_template("inicio.html",
-                           clientes=clientes,
+                           clientes=clientes_list,
                            efectivo_diario=efectivo_diario,
                            total_deuda=total_deuda,
                            total_efectivo=total_efectivo,
