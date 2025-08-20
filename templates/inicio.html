@@ -1,51 +1,53 @@
 {% extends "base.html" %}
 
 {% block contenido %}
-<div class="container mt-4">
-    <h2>Lista de Clientes</h2>
+<h2>Lista de Clientes</h2>
 
-    <!-- Formulario de filtro -->
-    <form method="GET" action="{{ url_for('inicio') }}" class="mb-3 d-flex">
-        <input type="text" name="filtro" placeholder="Buscar cliente" class="form-control me-2" value="{{ request.args.get('filtro','') }}">
-        <button type="submit" class="btn btn-primary">Buscar</button>
-    </form>
+<form method="get" action="{{ url_for('inicio') }}" class="mb-3">
+    <input type="text" name="filtro" placeholder="Filtrar por nombre" value="{{ filtro }}">
+    <button type="submit">Filtrar</button>
+    <a href="{{ url_for('inicio') }}">Limpiar</a>
+</form>
 
-    <!-- Total de deuda -->
-    <h4>Total Deuda Actual: {{ total_deuda|peso }}</h4>
+<table border="1" cellpadding="5" cellspacing="0">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Teléfono</th>
+            <th>Documento</th>
+            <th>Fecha de préstamo</th>
+            <th>Monto prestado</th>
+            <th>Deuda actual</th>
+            <th>Observación</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for cliente in clientes %}
+        <tr>
+            <td>{{ cliente.id }}</td>
+            <td>{{ cliente.nombre }}</td>
+            <td>{{ cliente.telefono or '' }}</td>
+            <td>{{ cliente.documento or '' }}</td>
+            <td>{{ cliente.fecha_registro.strftime('%Y-%m-%d') if cliente.fecha_registro else '' }}</td>
+            <td>${{ "{:,.0f}".format(cliente.monto_prestado) }}</td>
+            <td>${{ "{:,.0f}".format(cliente.deuda_actual) }}</td>
+            <td>{{ cliente.observacion or '' }}</td>
+            <td>
+                <a href="{{ url_for('editar_cliente', id=cliente.id) }}">Editar</a> |
+                <a href="{{ url_for('pagos', id=cliente.id) }}">Pagos</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        <tr>
+            <td colspan="6" style="text-align:right"><strong>Total deuda:</strong></td>
+            <td colspan="3"><strong>${{ "{:,.0f}".format(total_deuda) }}</strong></td>
+        </tr>
+    </tfoot>
+</table>
 
-    <!-- Tabla de clientes -->
-    <table class="table table-striped mt-3">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Nombre</th>
-                <th>Teléfono</th>
-                <th>Documento</th>
-                <th>Fecha Préstamo</th>
-                <th>Monto Prestado</th>
-                <th>Deuda Actual</th>
-                <th>Observación</th>
-                <th>Acciones</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for cliente in clientes %}
-            <tr>
-                <td>{{ cliente.id }}</td>
-                <td>{{ cliente.nombre }}</td>
-                <td>{{ cliente.telefono or '-' }}</td>
-                <td>{{ cliente.documento or '-' }}</td>
-                <td>{{ cliente.fecha_registro.strftime('%d/%m/%Y') }}</td>
-                <td>{{ cliente.monto_prestado|peso }}</td>
-                <td>{{ cliente.deuda_actual|peso }}</td>
-                <td>{{ cliente.observacion or '-' }}</td>
-                <td>
-                    <a href="{{ url_for('editar_cliente', id=cliente.id) }}" class="btn btn-sm btn-warning">Editar</a>
-                    <a href="{{ url_for('pagos', id=cliente.id) }}" class="btn btn-sm btn-success">Pagos</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+<a href="{{ url_for('nuevo') }}">Agregar nuevo cliente</a>
 {% endblock %}
