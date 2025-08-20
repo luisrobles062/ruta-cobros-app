@@ -45,30 +45,34 @@ def logout():
 def inicio():
     if "usuario" not in session:
         return redirect(url_for("login"))
-    
-    filtro = request.args.get("filtro", "").strip()
+
     conn = get_db_connection()
     cur = conn.cursor()
-    
-    if filtro:
-        cur.execute("SELECT * FROM clientes WHERE nombre ILIKE %s ORDER BY id ASC;", (f"%{filtro}%",))
-    else:
-        cur.execute("SELECT * FROM clientes ORDER BY id ASC;")
-    
+
+    # Obtener clientes y calcular deuda actual
+    cur.execute("SELECT * FROM clientes ORDER BY id ASC;")
     clientes = cur.fetchall()
-    
-    total_deuda = 0
-    for c in clientes:
-        cur.execute("SELECT COALESCE(SUM(monto),0) as total_pagos FROM pagos WHERE cliente_id=%s;", (c['id'],))
-        pagos_total = float(cur.fetchone()['total_pagos'] or 0)
-        monto_prestado = float(c['monto_prestado'] or 0)
-        c['deuda_actual'] = monto_prestado - pagos_total
-        total_deuda += c['deuda_actual']
-    
+
+    # Calcular deuda actual en tiempo real sumando pagos
+    for cliente in clientes:
+        cur.execute("SELECT COALESCE(SUM(monto),0) as total_pagos FROM pagos WHERE cliente_id=%s;", (cliente['id'],))
+        total_pagos = cur.fetchone()['total_pagos']
+        cliente['deuda_actual'] = float(cliente['monto_prestado']) - float(total_pagos)
+
+    # Total de todas las deudas actuales
+    total_deuda = sum(cliente['deuda_actual'] for cliente in clientes)
+
+    # Opcional: filtrar efectivo diario
+    fecha_filtro = request.args.get("fecha_efectivo")
+    if fecha_filtro:
+        cur.execute("SELECT * FROM efectivo_diario WHERE fecha=%s;", (fecha_filtro,))
+    else:
+        cur.execute("SELECT * FROM efectivo_diario ORDER BY fecha DESC;")
+    efectivo = cur.fetchall()
+
     cur.close()
     conn.close()
-    
-    return render_template("inicio.html", clientes=clientes, filtro=filtro, total_deuda=total_deuda)
+    return render_template("inicio.html", clientes=clientes, total_deuda=total_deuda, efectivo=efectivo, fecha_filtro=fecha_filtro)
 
 # ---------------------------
 # Nuevo Cliente
@@ -77,13 +81,13 @@ def inicio():
 def nuevo():
     if "usuario" not in session:
         return redirect(url_for("login"))
-    
+
     if request.method == "POST":
         nombre = request.form.get("nombre")
         monto_prestado = request.form.get("monto_prestado")
         fecha_registro = request.form.get("fecha") or datetime.today().strftime('%Y-%m-%d')
         observacion = request.form.get("observacion") or "N/A"
-        
+
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
@@ -93,11 +97,10 @@ def nuevo():
         conn.commit()
         cur.close()
         conn.close()
-        
         flash("Cliente agregado correctamente")
         return redirect(url_for("inicio"))
-    
-    return render_template("nuevo_cliente.html")
+
+    return render_template("nuevo_cliente.html", datetime=datetime)
 
 # ---------------------------
 # Editar Cliente
@@ -106,16 +109,16 @@ def nuevo():
 def editar_cliente(id):
     if "usuario" not in session:
         return redirect(url_for("login"))
-    
+
     conn = get_db_connection()
     cur = conn.cursor()
-    
+
     if request.method == "POST":
         nombre = request.form.get("nombre")
         monto_prestado = request.form.get("monto_prestado")
         fecha_registro = request.form.get("fecha") or datetime.today().strftime('%Y-%m-%d')
         observacion = request.form.get("observacion") or "N/A"
-        
+
         cur.execute("""
             UPDATE clientes
             SET nombre=%s, monto_prestado=%s, fecha_registro=%s, observacion=%s
@@ -124,15 +127,15 @@ def editar_cliente(id):
         conn.commit()
         cur.close()
         conn.close()
-        
         flash("Cliente actualizado correctamente")
         return redirect(url_for("inicio"))
+
     else:
         cur.execute("SELECT * FROM clientes WHERE id=%s;", (id,))
         cliente = cur.fetchone()
         cur.close()
         conn.close()
-        return render_template("editar_cliente.html", cliente=cliente)
+        return render_template("editar_cliente.html", cliente=cliente, datetime=datetime)
 
 # ---------------------------
 # Pagos
@@ -141,13 +144,14 @@ def editar_cliente(id):
 def pagos(id):
     if "usuario" not in session:
         return redirect(url_for("login"))
-    
+
     conn = get_db_connection()
     cur = conn.cursor()
-    
+
     if request.method == "POST":
         monto = request.form.get("monto")
         fecha_pago = datetime.today().strftime('%Y-%m-%d')
+
         cur.execute("""
             INSERT INTO pagos (cliente_id, monto, fecha_pago)
             VALUES (%s, %s, %s);
@@ -157,15 +161,15 @@ def pagos(id):
         conn.close()
         flash("Pago registrado correctamente")
         return redirect(url_for("inicio"))
-    
-    cur.execute("SELECT * FROM clientes WHERE id=%s;", (id,))
-    cliente = cur.fetchone()
-    cur.execute("SELECT * FROM pagos WHERE cliente_id=%s ORDER BY fecha_pago DESC;", (id,))
-    pagos_cliente = cur.fetchall()
-    
-    cur.close()
-    conn.close()
-    return render_template("pagos.html", cliente=cliente, pagos=pagos_cliente)
+
+    else:
+        cur.execute("SELECT * FROM clientes WHERE id=%s;", (id,))
+        cliente = cur.fetchone()
+        cur.execute("SELECT * FROM pagos WHERE cliente_id=%s ORDER BY fecha_pago DESC;", (id,))
+        pagos_cliente = cur.fetchall()
+        cur.close()
+        conn.close()
+        return render_template("pagos.html", cliente=cliente, pagos=pagos_cliente)
 
 # ---------------------------
 # Editar Pago
@@ -174,10 +178,10 @@ def pagos(id):
 def editar_pago(id):
     if "usuario" not in session:
         return redirect(url_for("login"))
-    
+
     conn = get_db_connection()
     cur = conn.cursor()
-    
+
     if request.method == "POST":
         monto = request.form.get("monto")
         cur.execute("UPDATE pagos SET monto=%s WHERE id=%s;", (monto, id))
@@ -186,12 +190,36 @@ def editar_pago(id):
         conn.close()
         flash("Pago actualizado correctamente")
         return redirect(url_for("inicio"))
+
     else:
         cur.execute("SELECT * FROM pagos WHERE id=%s;", (id,))
         pago = cur.fetchone()
         cur.close()
         conn.close()
         return render_template("editar_pago.html", pago=pago)
+
+# ---------------------------
+# Efectivo diario
+# ---------------------------
+@app.route("/efectivo", methods=["POST"])
+def efectivo():
+    if "usuario" not in session:
+        return redirect(url_for("login"))
+
+    fecha = request.form.get("fecha_efectivo") or datetime.today().strftime('%Y-%m-%d')
+    monto = request.form.get("monto_efectivo")
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO efectivo_diario (fecha, monto)
+        VALUES (%s, %s);
+    """, (fecha, monto))
+    conn.commit()
+    cur.close()
+    conn.close()
+    flash("Efectivo diario registrado correctamente")
+    return redirect(url_for("inicio"))
 
 # ---------------------------
 # Ejecutar app
