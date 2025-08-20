@@ -1,41 +1,51 @@
 {% extends "base.html" %}
 
 {% block contenido %}
-<div class="container">
-    <h2>Lista de Clientes</h2>
-    <a href="{{ url_for('nuevo') }}">Agregar Nuevo Cliente</a>
-    {% if clientes %}
-    <table border="1" cellpadding="5">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Nombre</th>
-                <th>Monto Prestado</th>
-                <th>Fecha</th>
-                <th>Observación</th>
-                <th>Deuda Actual</th>
-                <th>Acciones</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for cliente in clientes %}
-            <tr>
-                <td>{{ cliente.id }}</td>
-                <td>{{ cliente.nombre }}</td>
-                <td>{{ cliente.monto_prestado }}</td>
-                <td>{{ cliente.fecha }}</td>
-                <td>{{ cliente.observacion }}</td>
-                <td>{{ cliente.deuda_actual }}</td>
-                <td>
-                    <a href="{{ url_for('editar_cliente', id=cliente.id) }}">Editar</a> |
-                    <a href="{{ url_for('pagos', id=cliente.id) }}">Pagos</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p>No hay clientes registrados.</p>
-    {% endif %}
-</div>
+<h2>Lista de Clientes</h2>
+
+<form method="GET" action="{{ url_for('inicio') }}">
+    <div>
+        <label for="filtro_nombre">Filtrar por nombre:</label>
+        <input type="text" id="filtro_nombre" name="nombre" value="{{ request.args.get('nombre', '') }}">
+    </div>
+    <div>
+        <label for="filtro_fecha">Filtrar por fecha:</label>
+        <input type="date" id="filtro_fecha" name="fecha" value="{{ request.args.get('fecha', '') }}">
+    </div>
+    <button type="submit">Filtrar</button>
+</form>
+
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Monto Prestado</th>
+            <th>Deuda Actual</th>
+            <th>Fecha</th>
+            <th>Observación</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for cliente in clientes %}
+        <tr>
+            <td>{{ cliente.id }}</td>
+            <td>{{ cliente.nombre }}</td>
+            <td>{{ cliente.monto_prestado }}</td>
+            <td>{{ cliente.deuda_actual }}</td>
+            <td>{{ cliente.fecha.strftime('%Y-%m-%d') if cliente.fecha else '' }}</td>
+            <td>{{ cliente.observacion or '' }}</td>
+            <td>
+                <a href="{{ url_for('editar_cliente', id=cliente.id) }}">Editar</a> |
+                <a href="{{ url_for('pagos', id=cliente.id) }}">Pagos</a>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="7">No se encontraron clientes.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
 {% endblock %}
