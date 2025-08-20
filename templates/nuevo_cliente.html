@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block titulo %}Nuevo Cliente - Ruta de Cobro{% endblock %}
+
+{% block contenido %}
+<div class="container" style="max-width: 500px; margin-top: 50px;">
+    <h2 class="text-center mb-4">Agregar Nuevo Cliente</h2>
+    <form method="post">
+        <div class="mb-3">
+            <label class="form-label">Nombre</label>
+            <input type="text" name="nombre" class="form-control" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Teléfono</label>
+            <input type="text" name="telefono" class="form-control" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Documento <small class="text-muted">(opcional)</small></label>
+            <input type="text" name="documento" class="form-control" placeholder="Puede dejarlo vacío">
+        </div>
+        <button type="submit" class="btn btn-primary w-100">Agregar Cliente</button>
+    </form>
+</div>
+{% endblock %}
