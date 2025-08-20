@@ -60,24 +60,28 @@ def inicio():
 def nuevo():
     if "usuario" not in session:
         return redirect(url_for("login"))
+    
     if request.method == "POST":
         nombre = request.form.get("nombre")
         monto_prestado = request.form.get("monto_prestado")
-        fecha = request.form.get("fecha") or datetime.today().strftime('%Y-%m-%d')
+        fecha_registro = request.form.get("fecha") or datetime.today().strftime('%Y-%m-%d')
         observacion = request.form.get("observacion") or "N/A"
 
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO clientes (nombre, monto_prestado, fecha, observacion)
+            INSERT INTO clientes (nombre, monto_prestado, fecha_registro, observacion)
             VALUES (%s, %s, %s, %s);
-        """, (nombre, monto_prestado, fecha, observacion))
+        """, (nombre, monto_prestado, fecha_registro, observacion))
         conn.commit()
         cur.close()
         conn.close()
         flash("Cliente agregado correctamente")
         return redirect(url_for("inicio"))
-    return render_template("nuevo_cliente.html")
+    
+    # Pasamos fecha actual al template
+    fecha_hoy = datetime.today().strftime('%Y-%m-%d')
+    return render_template("nuevo_cliente.html", fecha_hoy=fecha_hoy)
 
 # ---------------------------
 # Editar Cliente
@@ -91,14 +95,14 @@ def editar_cliente(id):
     if request.method == "POST":
         nombre = request.form.get("nombre")
         monto_prestado = request.form.get("monto_prestado")
-        fecha = request.form.get("fecha") or datetime.today().strftime('%Y-%m-%d')
+        fecha_registro = request.form.get("fecha") or datetime.today().strftime('%Y-%m-%d')
         observacion = request.form.get("observacion") or "N/A"
 
         cur.execute("""
             UPDATE clientes
-            SET nombre=%s, monto_prestado=%s, fecha=%s, observacion=%s
+            SET nombre=%s, monto_prestado=%s, fecha_registro=%s, observacion=%s
             WHERE id=%s;
-        """, (nombre, monto_prestado, fecha, observacion, id))
+        """, (nombre, monto_prestado, fecha_registro, observacion, id))
         conn.commit()
         cur.close()
         conn.close()
