@@ -13,7 +13,7 @@ app.secret_key = os.environ.get("SECRET_KEY", "secreto")
 
 # ========= Conexión a Neon =========
 # 1) Usa DATABASE_URL (Render/entorno)
-# 2) Si no está, usa TU URL de Neon (la que compartiste)
+# 2) Si no está, usa tu URL de Neon (la que compartiste)
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://neondb_owner:npg_DqyQpk4iBLh3@ep-still-water-adszkvnv-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
@@ -66,9 +66,11 @@ def init_schema():
     finally:
         conn.close()
 
-@app.before_first_request
-def _boot():
+# ✅ Inicializa el esquema al importar (compatible con Flask 3.x y Gunicorn)
+try:
     init_schema()
+except Exception as e:
+    app.logger.error(f"init_schema() falló: {e}")
 
 # ========= Helpers =========
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -100,7 +102,7 @@ def home():
             cur.execute("SELECT COALESCE(SUM(monto),0) FROM pagos;")
             total_recaudado = cur.fetchone()[0]
 
-        # Si quieres abrir con 'inicio_logo.html', cambia abajo 'inicio.html' por 'inicio_logo.html'
+        # Cambia a "inicio_logo.html" si prefieres
         return render_template(
             "inicio.html",
             clientes=clientes,
