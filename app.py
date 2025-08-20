@@ -39,9 +39,9 @@ def logout():
     return redirect(url_for("login"))
 
 # ---------------------------
-# Inicio - lista de clientes
+# Inicio - lista de clientes y efectivo diario
 # ---------------------------
-@app.route("/inicio")
+@app.route("/inicio", methods=["GET", "POST"])
 def inicio():
     if "usuario" not in session:
         return redirect(url_for("login"))
@@ -49,30 +49,49 @@ def inicio():
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # Obtener clientes y calcular deuda actual
+    # Registrar efectivo diario si viene POST
+    if request.method == "POST":
+        fecha_efectivo = request.form.get("fecha_efectivo") or datetime.today().strftime('%Y-%m-%d')
+        monto_efectivo = request.form.get("monto_efectivo")
+        if monto_efectivo:
+            cur.execute("""
+                INSERT INTO efectivo_diario (fecha, monto)
+                VALUES (%s, %s);
+            """, (fecha_efectivo, monto_efectivo))
+            conn.commit()
+            flash("Efectivo diario registrado correctamente")
+
+    # Traer clientes
     cur.execute("SELECT * FROM clientes ORDER BY id ASC;")
     clientes = cur.fetchall()
 
-    # Calcular deuda actual en tiempo real sumando pagos
+    # Calcular deuda actual de cada cliente (monto prestado - suma pagos)
     for cliente in clientes:
         cur.execute("SELECT COALESCE(SUM(monto),0) as total_pagos FROM pagos WHERE cliente_id=%s;", (cliente['id'],))
-        total_pagos = cur.fetchone()['total_pagos']
-        cliente['deuda_actual'] = float(cliente['monto_prestado']) - float(total_pagos)
+        pagos_cliente = cur.fetchone()
+        cliente['deuda_actual'] = float(cliente['monto_prestado']) - float(pagos_cliente['total_pagos'])
 
-    # Total de todas las deudas actuales
-    total_deuda = sum(cliente['deuda_actual'] for cliente in clientes)
+    # Total de deudas
+    total_deuda = sum([c['deuda_actual'] for c in clientes])
 
-    # Opcional: filtrar efectivo diario
-    fecha_filtro = request.args.get("fecha_efectivo")
-    if fecha_filtro:
-        cur.execute("SELECT * FROM efectivo_diario WHERE fecha=%s;", (fecha_filtro,))
-    else:
-        cur.execute("SELECT * FROM efectivo_diario ORDER BY fecha DESC;")
-    efectivo = cur.fetchall()
+    # Efectivo diario
+    cur.execute("SELECT * FROM efectivo_diario ORDER BY fecha DESC;")
+    efectivo_diario = cur.fetchall()
+
+    # Total de efectivo diario
+    total_efectivo = sum([e['monto'] for e in efectivo_diario])
+
+    # Total combinado deuda + efectivo
+    total_combinado = total_deuda + total_efectivo
 
     cur.close()
     conn.close()
-    return render_template("inicio.html", clientes=clientes, total_deuda=total_deuda, efectivo=efectivo, fecha_filtro=fecha_filtro)
+    return render_template("inicio.html",
+                           clientes=clientes,
+                           efectivo_diario=efectivo_diario,
+                           total_deuda=total_deuda,
+                           total_efectivo=total_efectivo,
+                           total_combinado=total_combinado)
 
 # ---------------------------
 # Nuevo Cliente
@@ -81,7 +100,6 @@ def inicio():
 def nuevo():
     if "usuario" not in session:
         return redirect(url_for("login"))
-
     if request.method == "POST":
         nombre = request.form.get("nombre")
         monto_prestado = request.form.get("monto_prestado")
@@ -99,8 +117,7 @@ def nuevo():
         conn.close()
         flash("Cliente agregado correctamente")
         return redirect(url_for("inicio"))
-
-    return render_template("nuevo_cliente.html", datetime=datetime)
+    return render_template("nuevo_cliente.html")
 
 # ---------------------------
 # Editar Cliente
@@ -109,10 +126,8 @@ def nuevo():
 def editar_cliente(id):
     if "usuario" not in session:
         return redirect(url_for("login"))
-
     conn = get_db_connection()
     cur = conn.cursor()
-
     if request.method == "POST":
         nombre = request.form.get("nombre")
         monto_prestado = request.form.get("monto_prestado")
@@ -129,13 +144,12 @@ def editar_cliente(id):
         conn.close()
         flash("Cliente actualizado correctamente")
         return redirect(url_for("inicio"))
-
     else:
         cur.execute("SELECT * FROM clientes WHERE id=%s;", (id,))
         cliente = cur.fetchone()
         cur.close()
         conn.close()
-        return render_template("editar_cliente.html", cliente=cliente, datetime=datetime)
+        return render_template("editar_cliente.html", cliente=cliente)
 
 # ---------------------------
 # Pagos
@@ -144,14 +158,11 @@ def editar_cliente(id):
 def pagos(id):
     if "usuario" not in session:
         return redirect(url_for("login"))
-
     conn = get_db_connection()
     cur = conn.cursor()
-
     if request.method == "POST":
         monto = request.form.get("monto")
         fecha_pago = datetime.today().strftime('%Y-%m-%d')
-
         cur.execute("""
             INSERT INTO pagos (cliente_id, monto, fecha_pago)
             VALUES (%s, %s, %s);
@@ -161,7 +172,6 @@ def pagos(id):
         conn.close()
         flash("Pago registrado correctamente")
         return redirect(url_for("inicio"))
-
     else:
         cur.execute("SELECT * FROM clientes WHERE id=%s;", (id,))
         cliente = cur.fetchone()
@@ -178,10 +188,8 @@ def pagos(id):
 def editar_pago(id):
     if "usuario" not in session:
         return redirect(url_for("login"))
-
     conn = get_db_connection()
     cur = conn.cursor()
-
     if request.method == "POST":
         monto = request.form.get("monto")
         cur.execute("UPDATE pagos SET monto=%s WHERE id=%s;", (monto, id))
@@ -190,36 +198,12 @@ def editar_pago(id):
         conn.close()
         flash("Pago actualizado correctamente")
         return redirect(url_for("inicio"))
-
     else:
         cur.execute("SELECT * FROM pagos WHERE id=%s;", (id,))
         pago = cur.fetchone()
         cur.close()
         conn.close()
         return render_template("editar_pago.html", pago=pago)
-
-# ---------------------------
-# Efectivo diario
-# ---------------------------
-@app.route("/efectivo", methods=["POST"])
-def efectivo():
-    if "usuario" not in session:
-        return redirect(url_for("login"))
-
-    fecha = request.form.get("fecha_efectivo") or datetime.today().strftime('%Y-%m-%d')
-    monto = request.form.get("monto_efectivo")
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO efectivo_diario (fecha, monto)
-        VALUES (%s, %s);
-    """, (fecha, monto))
-    conn.commit()
-    cur.close()
-    conn.close()
-    flash("Efectivo diario registrado correctamente")
-    return redirect(url_for("inicio"))
 
 # ---------------------------
 # Ejecutar app
