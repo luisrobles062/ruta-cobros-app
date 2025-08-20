@@ -1,10 +1,27 @@
 {% extends "base.html" %}
-
 {% block contenido %}
-<h2>Clientes</h2>
+<h2>Bienvenido, {{ session['usuario'] }}</h2>
 
-<!-- Filtro por cliente -->
-<input type="text" id="filtroCliente" placeholder="Filtrar por nombre..." onkeyup="filtrarTabla()">
+<!-- Formulario Efectivo Diario -->
+<div style="margin-bottom:20px; padding:10px; border:1px solid #ccc; border-radius:5px;">
+    <form method="POST" action="{{ url_for('inicio') }}">
+        <label for="fecha_efectivo">Fecha:</label>
+        <input type="date" name="fecha_efectivo" value="{{ datetime.utcnow().strftime('%Y-%m-%d') }}">
+        <label for="monto_efectivo">Efectivo diario (COP):</label>
+        <input type="number" name="monto_efectivo" step="0.01" placeholder="0.00">
+        <button type="submit">Registrar Efectivo</button>
+    </form>
+</div>
+
+<!-- Totales -->
+<div style="margin-bottom:20px;">
+    <p><strong>Total deuda actual:</strong> ${{ "{:,.0f}".format(total_deuda) }}</p>
+    <p><strong>Total efectivo diario:</strong> ${{ "{:,.0f}".format(total_efectivo) }}</p>
+    <p><strong>Total combinado (deuda + efectivo):</strong> ${{ "{:,.0f}".format(total_combinado) }}</p>
+</div>
+
+<!-- Filtro de clientes -->
+<input type="text" id="filtroCliente" onkeyup="filtrarTabla()" placeholder="Buscar cliente...">
 
 <!-- Tabla de clientes -->
 <table id="tablaClientes" border="1" cellpadding="5" cellspacing="0">
@@ -16,6 +33,7 @@
             <th>Deuda Actual</th>
             <th>Fecha Registro</th>
             <th>Observación</th>
+            <th>Registrar Pago</th>
         </tr>
     </thead>
     <tbody>
@@ -23,31 +41,22 @@
         <tr>
             <td>{{ c.id }}</td>
             <td>{{ c.nombre }}</td>
-            <td>{{ "{:,.0f}".format(c.monto_prestado) }} COP</td>
-            <td>{{ "{:,.0f}".format(c.deuda_actual) }} COP</td>
-            <td>{{ c.fecha_registro.strftime('%Y-%m-%d') }}</td>
+            <td>${{ "{:,.0f}".format(c.monto_prestado) }}</td>
+            <td>${{ "{:,.0f}".format(c.deuda_actual) }}</td>
+            <td>{{ c.fecha_registro.strftime('%Y-%m-%d') if c.fecha_registro else '' }}</td>
             <td>{{ c.observacion or '' }}</td>
+            <td>
+                <form method="POST" action="{{ url_for('pago', cliente_id=c.id) }}">
+                    <input type="number" name="monto" step="0.01" placeholder="0.00" required>
+                    <button type="submit">Registrar</button>
+                </form>
+            </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
 
-<!-- Totales -->
-<h3>Total Deuda: {{ "{:,.0f}".format(total_deuda) }} COP</h3>
-<h3>Total Efectivo: {{ "{:,.0f}".format(total_efectivo) }} COP</h3>
-<h3>Total Combinado: {{ "{:,.0f}".format(total_combinado) }} COP</h3>
-
-<!-- Efectivo Diario -->
-<h2>Registrar Efectivo Diario</h2>
-<form method="POST">
-    <label>Fecha:</label>
-    <input type="date" name="fecha_efectivo" value="{{ datetime.utcnow().strftime('%Y-%m-%d') }}">
-    <label>Monto:</label>
-    <input type="number" step="0.01" name="monto_efectivo" placeholder="0.00">
-    <button type="submit">Registrar</button>
-</form>
-
-<!-- Lista de efectivo diario -->
+<!-- Historial de Efectivo Diario -->
 <h3>Historial de Efectivo Diario</h3>
 <table border="1" cellpadding="5" cellspacing="0">
     <thead>
@@ -62,21 +71,21 @@
         <tr>
             <td>{{ e.id }}</td>
             <td>{{ e.fecha.strftime('%Y-%m-%d') }}</td>
-            <td>{{ "{:,.0f}".format(e.monto) }} COP</td>
+            <td>${{ "{:,.0f}".format(e.monto) }} COP</td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
 
+<!-- Script de filtrado -->
 <script>
 function filtrarTabla() {
     var input = document.getElementById("filtroCliente");
     var filter = input.value.toUpperCase();
     var table = document.getElementById("tablaClientes");
     var tr = table.getElementsByTagName("tr");
-
     for (var i = 1; i < tr.length; i++) {
-        var td = tr[i].getElementsByTagName("td")[1]; // columna nombre
+        var td = tr[i].getElementsByTagName("td")[1]; // columna Nombre
         if (td) {
             var txtValue = td.textContent || td.innerText;
             tr[i].style.display = txtValue.toUpperCase().indexOf(filter) > -1 ? "" : "none";
