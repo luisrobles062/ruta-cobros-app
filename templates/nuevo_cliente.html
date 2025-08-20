@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block titulo %}Nuevo Cliente - Ruta de Cobro{% endblock %}
+{% block titulo %}Nuevo Cliente{% endblock %}
 
 {% block contenido %}
 <div class="container" style="max-width: 500px; margin-top: 50px;">
@@ -11,12 +11,16 @@
             <input type="text" name="nombre" class="form-control" required>
         </div>
         <div class="mb-3">
-            <label class="form-label">Teléfono</label>
-            <input type="text" name="telefono" class="form-control" required>
+            <label class="form-label">Monto Prestado</label>
+            <input type="number" step="0.01" name="monto_prestado" class="form-control" required>
         </div>
         <div class="mb-3">
-            <label class="form-label">Documento <small class="text-muted">(opcional)</small></label>
-            <input type="text" name="documento" class="form-control" placeholder="Puede dejarlo vacío">
+            <label class="form-label">Fecha</label>
+            <input type="date" name="fecha" class="form-control">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Observación</label>
+            <textarea name="observacion" class="form-control"></textarea>
         </div>
         <button type="submit" class="btn btn-primary w-100">Agregar Cliente</button>
     </form>
