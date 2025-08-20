@@ -63,15 +63,15 @@ def nuevo():
     if request.method == "POST":
         nombre = request.form.get("nombre")
         monto_prestado = request.form.get("monto_prestado")
-        fecha_registro = request.form.get("fecha") or datetime.today().strftime('%Y-%m-%d')
+        fecha = request.form.get("fecha") or datetime.today().strftime('%Y-%m-%d')
         observacion = request.form.get("observacion") or "N/A"
 
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO clientes (nombre, monto_prestado, fecha, observacion, deuda_actual)
-            VALUES (%s, %s, %s, %s, %s);
-        """, (nombre, monto_prestado, fecha_registro, observacion, monto_prestado))
+            INSERT INTO clientes (nombre, monto_prestado, fecha, observacion)
+            VALUES (%s, %s, %s, %s);
+        """, (nombre, monto_prestado, fecha, observacion))
         conn.commit()
         cur.close()
         conn.close()
@@ -91,14 +91,14 @@ def editar_cliente(id):
     if request.method == "POST":
         nombre = request.form.get("nombre")
         monto_prestado = request.form.get("monto_prestado")
-        fecha_registro = request.form.get("fecha") or datetime.today().strftime('%Y-%m-%d')
+        fecha = request.form.get("fecha") or datetime.today().strftime('%Y-%m-%d')
         observacion = request.form.get("observacion") or "N/A"
 
         cur.execute("""
             UPDATE clientes
-            SET nombre=%s, monto_prestado=%s, fecha=%s, observacion=%s, deuda_actual=%s
+            SET nombre=%s, monto_prestado=%s, fecha=%s, observacion=%s
             WHERE id=%s;
-        """, (nombre, monto_prestado, fecha_registro, observacion, monto_prestado, id))
+        """, (nombre, monto_prestado, fecha, observacion, id))
         conn.commit()
         cur.close()
         conn.close()
@@ -121,19 +121,12 @@ def pagos(id):
     conn = get_db_connection()
     cur = conn.cursor()
     if request.method == "POST":
-        monto = float(request.form.get("monto"))
+        monto = request.form.get("monto")
         fecha_pago = datetime.today().strftime('%Y-%m-%d')
-        # Registrar pago
         cur.execute("""
             INSERT INTO pagos (cliente_id, monto, fecha_pago)
             VALUES (%s, %s, %s);
         """, (id, monto, fecha_pago))
-        # Actualizar deuda
-        cur.execute("""
-            UPDATE clientes
-            SET deuda_actual = deuda_actual - %s
-            WHERE id = %s;
-        """, (monto, id))
         conn.commit()
         cur.close()
         conn.close()
@@ -158,15 +151,8 @@ def editar_pago(id):
     conn = get_db_connection()
     cur = conn.cursor()
     if request.method == "POST":
-        monto = float(request.form.get("monto"))
-        # Obtener el pago anterior para ajustar deuda
-        cur.execute("SELECT cliente_id, monto FROM pagos WHERE id=%s;", (id,))
-        pago = cur.fetchone()
-        diff = monto - pago['monto']
-        # Actualizar pago
+        monto = request.form.get("monto")
         cur.execute("UPDATE pagos SET monto=%s WHERE id=%s;", (monto, id))
-        # Ajustar deuda del cliente
-        cur.execute("UPDATE clientes SET deuda_actual = deuda_actual - %s WHERE id=%s;", (diff, pago['cliente_id']))
         conn.commit()
         cur.close()
         conn.close()
