@@ -1,43 +1,42 @@
 {% extends "base.html" %}
 
 {% block contenido %}
-<h2>Inicio - Clientes y Efectivo Diario</h2>
+<h2>Bienvenido, {{ session['usuario'] }}</h2>
 
-<!-- Sección Efectivo Diario -->
-<div style="margin-bottom: 20px; padding: 10px; border: 1px solid #ccc;">
-    <h3>Registrar Efectivo Diario</h3>
+<!-- Formulario Efectivo Diario -->
+<div style="margin-bottom:20px; padding:10px; border:1px solid #ccc; border-radius:5px;">
     <form method="POST" action="{{ url_for('inicio') }}">
         <label for="fecha_efectivo">Fecha:</label>
         <input type="date" name="fecha_efectivo" value="{{ datetime.utcnow().strftime('%Y-%m-%d') }}">
-        <label for="monto_efectivo">Monto (COP):</label>
-        <input type="number" step="0.01" name="monto_efectivo" required>
-        <button type="submit">Registrar</button>
+        <label for="monto_efectivo">Efectivo diario (COP):</label>
+        <input type="number" name="monto_efectivo" step="0.01" placeholder="0.00">
+        <button type="submit">Registrar Efectivo</button>
     </form>
 </div>
 
-<!-- Totales combinados -->
-<div style="margin-bottom: 20px; padding: 10px; background-color: #f2f2f2;">
-    <strong>Total Deuda Actual:</strong> ${{ "{:,.0f}".format(total_deuda) }}<br>
-    <strong>Total Efectivo Diario:</strong> ${{ "{:,.0f}".format(total_efectivo) }}<br>
-    <strong>Total Combinado (Deuda + Efectivo):</strong> ${{ "{:,.0f}".format(total_combinado) }}
+<!-- Totales -->
+<div style="margin-bottom:20px;">
+    <p><strong>Total deuda actual:</strong> ${{ "{:,.0f}".format(total_deuda) }}</p>
+    <p><strong>Total efectivo diario:</strong> ${{ "{:,.0f}".format(total_efectivo) }}</p>
+    <p><strong>Total combinado (deuda + efectivo):</strong> ${{ "{:,.0f}".format(total_combinado) }}</p>
 </div>
 
-<!-- Filtro de Clientes -->
-<div style="margin-bottom: 20px;">
-    <input type="text" id="filtroCliente" onkeyup="filtrarClientes()" placeholder="Filtrar por nombre de cliente">
-</div>
+<!-- Filtro de clientes -->
+<input type="text" id="filtroCliente" onkeyup="filtrarTabla()" placeholder="Buscar cliente...">
 
-<!-- Tabla de Clientes -->
-<table border="1" cellpadding="5" cellspacing="0" id="tablaClientes">
+<!-- Tabla de clientes -->
+<table id="tablaClientes" border="1" cellpadding="5" cellspacing="0">
     <thead>
         <tr>
             <th>ID</th>
             <th>Nombre</th>
-            <th>Monto Prestado</th>
-            <th>Deuda Actual</th>
-            <th>Fecha Registro</th>
+            <th>Teléfono</th>
+            <th>Documento</th>
+            <th>Fecha préstamo</th>
+            <th>Monto prestado</th>
+            <th>Deuda actual</th>
             <th>Observación</th>
-            <th>Acciones</th>
+            <th>Registrar pago</th>
         </tr>
     </thead>
     <tbody>
@@ -45,35 +44,42 @@
         <tr>
             <td>{{ cliente.id }}</td>
             <td>{{ cliente.nombre }}</td>
+            <td>{{ cliente.telefono or '' }}</td>
+            <td>{{ cliente.documento or '' }}</td>
+            <td>{{ cliente.fecha_registro.strftime('%Y-%m-%d') if cliente.fecha_registro else '' }}</td>
             <td>${{ "{:,.0f}".format(cliente.monto_prestado) }}</td>
             <td>${{ "{:,.0f}".format(cliente.deuda_actual) }}</td>
-            <td>{{ cliente.fecha_registro }}</td>
-            <td>{{ cliente.observacion }}</td>
+            <td>{{ cliente.observacion or '' }}</td>
             <td>
-                <a href="{{ url_for('editar_cliente', id=cliente.id) }}">Editar</a> |
-                <a href="{{ url_for('pagos', id=cliente.id) }}">Pagos</a>
+                <form method="POST" action="{{ url_for('pago', cliente_id=cliente.id) }}">
+                    <input type="number" name="monto" step="0.01" placeholder="0.00" required>
+                    <button type="submit">Registrar</button>
+                </form>
             </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
 
-<!-- Filtro de Clientes (JS) -->
 <script>
-function filtrarClientes() {
-    var input = document.getElementById("filtroCliente");
-    var filter = input.value.toUpperCase();
-    var table = document.getElementById("tablaClientes");
-    var tr = table.getElementsByTagName("tr");
+function filtrarTabla() {
+    var input, filter, table, tr, td, i, txtValue;
+    input = document.getElementById("filtroCliente");
+    filter = input.value.toUpperCase();
+    table = document.getElementById("tablaClientes");
+    tr = table.getElementsByTagName("tr");
 
-    for (var i = 1; i < tr.length; i++) { // empezar desde 1 para saltar encabezado
-        var td = tr[i].getElementsByTagName("td")[1]; // columna nombre
+    for (i = 1; i < tr.length; i++) {
+        td = tr[i].getElementsByTagName("td")[1]; // columna Nombre
         if (td) {
-            var textValue = td.textContent || td.innerText;
-            tr[i].style.display = textValue.toUpperCase().indexOf(filter) > -1 ? "" : "none";
-        }
+            txtValue = td.textContent || td.innerText;
+            if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                tr[i].style.display = "";
+            } else {
+                tr[i].style.display = "none";
+            }
+        }       
     }
 }
 </script>
-
 {% endblock %}
