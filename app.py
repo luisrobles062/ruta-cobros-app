@@ -49,6 +49,26 @@ def inicio():
     conn = get_db_connection()
     cur = conn.cursor()
 
+    # Clientes
+    cur.execute("SELECT * FROM clientes ORDER BY id ASC;")
+    clientes = cur.fetchall()
+
+    # Calcular deuda actual de cada cliente (monto prestado - suma pagos)
+    for cliente in clientes:
+        cur.execute("SELECT COALESCE(SUM(monto),0) as total_pagos FROM pagos WHERE cliente_id=%s;", (cliente['id'],))
+        pagos_cliente = cur.fetchone()
+        cliente['deuda_actual'] = float(cliente['monto_prestado']) - float(pagos_cliente['total_pagos'])
+
+    # Total deuda actual
+    total_deuda = sum([c['deuda_actual'] for c in clientes])
+
+    # Total efectivo diario
+    cur.execute("SELECT SUM(monto) AS total FROM efectivo_diario;")
+    total_efectivo = cur.fetchone()['total'] or 0
+
+    # Total combinado deuda + efectivo
+    total_combinado = total_deuda + total_efectivo
+
     # Registrar efectivo diario si viene POST
     if request.method == "POST":
         fecha_efectivo = request.form.get("fecha_efectivo") or datetime.today().strftime('%Y-%m-%d')
@@ -59,40 +79,18 @@ def inicio():
                 VALUES (%s, %s);
             """, (fecha_efectivo, monto_efectivo))
             conn.commit()
-            flash("Efectivo diario registrado correctamente")
-
-    # Traer clientes
-    cur.execute("SELECT * FROM clientes ORDER BY id ASC;")
-    clientes = cur.fetchall()
-
-    # Calcular deuda actual de cada cliente (monto prestado - suma pagos)
-    for cliente in clientes:
-        cur.execute("SELECT COALESCE(SUM(monto),0) as total_pagos FROM pagos WHERE cliente_id=%s;", (cliente['id'],))
-        pagos_cliente = cur.fetchone()
-        cliente['deuda_actual'] = float(cliente['monto_prestado']) - float(pagos_cliente['total_pagos'])
-
-    # Total de deudas
-    total_deuda = sum([c['deuda_actual'] for c in clientes])
-
-    # Efectivo diario
-    cur.execute("SELECT * FROM efectivo_diario ORDER BY fecha DESC;")
-    efectivo_diario = cur.fetchall()
-
-    # Total de efectivo diario
-    total_efectivo = sum([e['monto'] for e in efectivo_diario])
-
-    # Total combinado deuda + efectivo
-    total_combinado = total_deuda + total_efectivo
+            return redirect(url_for("inicio"))
 
     cur.close()
     conn.close()
-    return render_template("inicio.html",
-                           clientes=clientes,
-                           efectivo_diario=efectivo_diario,
-                           total_deuda=total_deuda,
-                           total_efectivo=total_efectivo,
-                           total_combinado=total_combinado)
 
+    return render_template(
+        "inicio.html",
+        clientes=clientes,
+        total_deuda=total_deuda,
+        total_efectivo=total_efectivo,
+        total_combinado=total_combinado,
+        datetime=datetime  # <-- PASAMOS datetime a la plantilla)
 # ---------------------------
 # Nuevo Cliente
 # ---------------------------
