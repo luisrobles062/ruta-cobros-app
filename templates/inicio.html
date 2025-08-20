@@ -1,53 +1,72 @@
 {% extends "base.html" %}
 
 {% block contenido %}
-<h2>Lista de Clientes</h2>
+<h2>RUTA DE COBRO LUIS ROBLES</h2>
 
-<form method="get" action="{{ url_for('inicio') }}" class="mb-3">
-    <input type="text" name="filtro" placeholder="Filtrar por nombre" value="{{ filtro }}">
-    <button type="submit">Filtrar</button>
-    <a href="{{ url_for('inicio') }}">Limpiar</a>
-</form>
+<!-- Sección Efectivo Diario -->
+<div style="margin-bottom:20px; padding:10px; border:1px solid #ccc; background-color:#f9f9f9;">
+    <h4>Efectivo Diario</h4>
+    <form method="POST" action="{{ url_for('efectivo') }}">
+        <label>Fecha:</label>
+        <input type="date" name="fecha_efectivo" value="{{ datetime.utcnow().strftime('%Y-%m-%d') }}">
+        <label>Monto:</label>
+        <input type="number" name="monto_efectivo" step="0.01" required>
+        <button type="submit">Registrar</button>
+    </form>
 
-<table border="1" cellpadding="5" cellspacing="0">
-    <thead>
-        <tr>
-            <th>ID</th>
-            <th>Nombre</th>
-            <th>Teléfono</th>
-            <th>Documento</th>
-            <th>Fecha de préstamo</th>
-            <th>Monto prestado</th>
-            <th>Deuda actual</th>
-            <th>Observación</th>
-            <th>Acciones</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for cliente in clientes %}
-        <tr>
-            <td>{{ cliente.id }}</td>
-            <td>{{ cliente.nombre }}</td>
-            <td>{{ cliente.telefono or '' }}</td>
-            <td>{{ cliente.documento or '' }}</td>
-            <td>{{ cliente.fecha_registro.strftime('%Y-%m-%d') if cliente.fecha_registro else '' }}</td>
-            <td>${{ "{:,.0f}".format(cliente.monto_prestado) }}</td>
-            <td>${{ "{:,.0f}".format(cliente.deuda_actual) }}</td>
-            <td>{{ cliente.observacion or '' }}</td>
-            <td>
-                <a href="{{ url_for('editar_cliente', id=cliente.id) }}">Editar</a> |
-                <a href="{{ url_for('pagos', id=cliente.id) }}">Pagos</a>
-            </td>
-        </tr>
+    <!-- Filtrar por fecha -->
+    <form method="GET" action="{{ url_for('inicio') }}" style="margin-top:10px;">
+        <label>Filtrar efectivo por fecha:</label>
+        <input type="date" name="fecha_efectivo" value="{{ fecha_filtro or '' }}">
+        <button type="submit">Filtrar</button>
+    </form>
+
+    {% if efectivo %}
+    <ul>
+        {% for e in efectivo %}
+        <li>{{ e.fecha }} - ${{ "{:,.0f}".format(e.monto) }}</li>
         {% endfor %}
-    </tbody>
-    <tfoot>
-        <tr>
-            <td colspan="6" style="text-align:right"><strong>Total deuda:</strong></td>
-            <td colspan="3"><strong>${{ "{:,.0f}".format(total_deuda) }}</strong></td>
-        </tr>
-    </tfoot>
-</table>
+    </ul>
+    {% endif %}
+</div>
 
-<a href="{{ url_for('nuevo') }}">Agregar nuevo cliente</a>
+<!-- Tabla de clientes -->
+<div>
+    <h4>Clientes</h4>
+    <table border="1" cellpadding="5" cellspacing="0">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Teléfono</th>
+                <th>Documento</th>
+                <th>Fecha préstamo</th>
+                <th>Monto prestado</th>
+                <th>Deuda actual</th>
+                <th>Observación</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cliente in clientes %}
+            <tr>
+                <td>{{ cliente.id }}</td>
+                <td>{{ cliente.nombre }}</td>
+                <td>{{ cliente.telefono or '' }}</td>
+                <td>{{ cliente.documento or '' }}</td>
+                <td>{{ cliente.fecha_registro }}</td>
+                <td>${{ "{:,.0f}".format(cliente.monto_prestado) }}</td>
+                <td>${{ "{:,.0f}".format(cliente.deuda_actual) }}</td>
+                <td>{{ cliente.observacion }}</td>
+                <td>
+                    <a href="{{ url_for('editar_cliente', id=cliente.id) }}">Editar</a> |
+                    <a href="{{ url_for('pagos', id=cliente.id) }}">Pagos</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h4>Total Deuda Actual: ${{ "{:,.0f}".format(total_deuda) }}</h4>
+</div>
 {% endblock %}
