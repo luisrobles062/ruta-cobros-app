@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, session, flash
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
@@ -6,159 +6,115 @@ from datetime import datetime
 app = Flask(__name__)
 app.secret_key = 'secreto'
 
-# Conexión a la base de datos PostgreSQL (Neon)
-DB_URL = "postgresql://neondb_owner:npg_3owpfIUOAT0a@ep-soft-bush-acv2a8v4-pooler.sa-east-1.aws.neon.tech/neondb"
+# Configuración de la base de datos PostgreSQL (Neon)
+DB_HOST = "ep-soft-bush-acv2a8v4-pooler.sa-east-1.aws.neon.tech"
+DB_NAME = "neondb"
+DB_USER = "neondb_owner"
+DB_PASS = "npg_3owpfIUOAT0a"
+DB_PORT = "5432"
 
 def get_db_connection():
-    conn = psycopg2.connect(DB_URL, cursor_factory=RealDictCursor)
+    conn = psycopg2.connect(
+        host=DB_HOST,
+        dbname=DB_NAME,
+        user=DB_USER,
+        password=DB_PASS,
+        port=DB_PORT,
+        cursor_factory=RealDictCursor
+    )
     return conn
 
-# Ruta raíz -> redirige al login
-@app.route("/")
-def index():
-    return redirect(url_for("login"))
-
-# Login
-@app.route("/login", methods=["GET", "POST"])
+# Ruta de login
+@app.route('/', methods=['GET', 'POST'])
 def login():
-    if request.method == "POST":
-        usuario = request.form.get("usuario")
-        contrasena = request.form.get("contrasena")
+    if request.method == 'POST':
+        usuario = request.form['usuario']
+        contrasena = request.form['contrasena']
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("SELECT * FROM usuarios WHERE usuario=%s AND contrasena=%s;", (usuario, contrasena))
+        cur.execute("SELECT * FROM usuarios WHERE usuario=%s AND contrasena=%s", (usuario, contrasena))
         user = cur.fetchone()
         cur.close()
         conn.close()
         if user:
-            session["usuario"] = usuario
-            return redirect(url_for("inicio"))
+            session['usuario'] = user['usuario']
+            return redirect(url_for('inicio'))
         else:
-            flash("Usuario o contraseña incorrectos")
-            return redirect(url_for("login"))
-    return render_template("login.html")
+            flash("Usuario o contraseña incorrectos", "error")
+            return redirect(url_for('login'))
+    return render_template('login.html')
 
-# Logout
-@app.route("/logout")
+# Ruta de logout
+@app.route('/logout')
 def logout():
-    session.pop("usuario", None)
-    return redirect(url_for("login"))
+    session.clear()
+    return redirect(url_for('login'))
 
-# Inicio
-@app.route("/inicio", methods=["GET", "POST"])
+# Página principal: lista de clientes y efectivo diario
+@app.route('/inicio', methods=['GET', 'POST'])
 def inicio():
-    if "usuario" not in session:
-        return redirect(url_for("login"))
+    if 'usuario' not in session:
+        return redirect(url_for('login'))
 
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # Registrar efectivo diario si viene POST
-    if request.method == "POST":
-        fecha_efectivo = request.form.get("fecha_efectivo") or datetime.today().strftime('%Y-%m-%d')
-        monto_efectivo = request.form.get("monto_efectivo")
-        if monto_efectivo:
-            try:
-                monto_efectivo = float(monto_efectivo)
-                cur.execute("""
-                    INSERT INTO efectivo_diario (fecha, monto)
-                    VALUES (%s, %s);
-                """, (fecha_efectivo, monto_efectivo))
-                conn.commit()
-                flash("Efectivo diario registrado correctamente")
-            except Exception as e:
-                flash(f"Error al registrar efectivo: {e}")
+    # Registrar efectivo diario
+    if request.method == 'POST' and 'monto_efectivo' in request.form:
+        fecha = request.form['fecha_efectivo']
+        monto = request.form['monto_efectivo']
+        if monto and monto.strip() != '':
+            cur.execute("INSERT INTO efectivo_diario (fecha, monto) VALUES (%s, %s)", (fecha, monto))
+            conn.commit()
 
     # Traer clientes
-    cur.execute("SELECT * FROM clientes ORDER BY id ASC;")
+    cur.execute("SELECT * FROM clientes ORDER BY id")
     clientes = cur.fetchall()
 
-    # Calcular deuda actual de cada cliente
-    clientes_list = []
-    for c in clientes:
-        cliente = dict(c)
-        cur.execute("SELECT COALESCE(SUM(monto),0) as total_pagos FROM pagos WHERE cliente_id=%s;", (cliente['id'],))
-        pagos_cliente = cur.fetchone()
-        total_pagos = float(pagos_cliente['total_pagos']) if pagos_cliente else 0
-        deuda = float(cliente['monto_prestado']) - total_pagos
-        cliente['deuda_actual'] = deuda
-        clientes_list.append(cliente)
-
-    # Total de deudas
-    total_deuda = sum([c['deuda_actual'] for c in clientes_list])
-
-    # Efectivo diario
-    cur.execute("SELECT * FROM efectivo_diario ORDER BY fecha DESC;")
+    # Traer efectivo diario
+    cur.execute("SELECT * FROM efectivo_diario ORDER BY id")
     efectivo_diario = cur.fetchall()
 
-    # Total de efectivo diario
-    total_efectivo = sum([float(e['monto']) for e in efectivo_diario]) if efectivo_diario else 0
-
-    # Total combinado deuda + efectivo
+    # Calcular totales
+    total_deuda = sum(c['deuda_actual'] for c in clientes)
+    total_efectivo = sum(e['monto'] for e in efectivo_diario)
     total_combinado = total_deuda + total_efectivo
 
     cur.close()
     conn.close()
 
-    return render_template("inicio.html",
-                           clientes=clientes_list,
+    return render_template('inicio.html',
+                           clientes=clientes,
                            efectivo_diario=efectivo_diario,
                            total_deuda=total_deuda,
                            total_efectivo=total_efectivo,
-                           total_combinado=total_combinado)
+                           total_combinado=total_combinado,
+                           datetime=datetime)
 
-# Registrar nuevo cliente
-@app.route("/nuevo", methods=["GET", "POST"])
-def nuevo():
-    if "usuario" not in session:
-        return redirect(url_for("login"))
-
-    if request.method == "POST":
-        nombre = request.form.get("nombre")
-        monto_prestado = request.form.get("monto_prestado")
-        observacion = request.form.get("observacion")
-        fecha_registro = request.form.get("fecha") or datetime.today().strftime('%Y-%m-%d')
-
-        if not nombre or not monto_prestado:
-            flash("Nombre y monto prestado son obligatorios")
-            return redirect(url_for("nuevo"))
-
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO clientes (nombre, monto_prestado, fecha_registro, observacion)
-            VALUES (%s, %s, %s, %s);
-        """, (nombre, monto_prestado, fecha_registro, observacion))
-        conn.commit()
-        cur.close()
-        conn.close()
-        flash("Cliente registrado correctamente")
-        return redirect(url_for("inicio"))
-
-    return render_template("nuevo_cliente.html")
-
-# Registrar pago
-@app.route("/pago/<int:cliente_id>", methods=["POST"])
+# Registrar pago de un cliente
+@app.route('/pago/<int:cliente_id>', methods=['POST'])
 def pago(cliente_id):
-    if "usuario" not in session:
-        return redirect(url_for("login"))
+    if 'usuario' not in session:
+        return redirect(url_for('login'))
 
-    monto = request.form.get("monto")
-    if not monto:
-        flash("Debe ingresar un monto")
-        return redirect(url_for("inicio"))
+    monto = request.form['monto']
+    fecha_pago = datetime.utcnow().date()
 
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO pagos (cliente_id, monto)
-        VALUES (%s, %s);
-    """, (cliente_id, monto))
+
+    # Insertar pago
+    cur.execute("INSERT INTO pagos (cliente_id, monto, fecha_pago) VALUES (%s, %s, %s)",
+                (cliente_id, monto, fecha_pago))
+
+    # Actualizar deuda actual
+    cur.execute("UPDATE clientes SET deuda_actual = deuda_actual - %s WHERE id=%s", (monto, cliente_id))
     conn.commit()
     cur.close()
     conn.close()
-    flash("Pago registrado correctamente")
-    return redirect(url_for("inicio"))
 
-if __name__ == "__main__":
+    flash(f"Pago de {monto} registrado correctamente.", "success")
+    return redirect(url_for('inicio'))
+
+if __name__ == '__main__':
     app.run(debug=True)
