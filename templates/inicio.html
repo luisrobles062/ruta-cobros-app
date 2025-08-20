@@ -1,27 +1,11 @@
 {% extends "base.html" %}
 {% block contenido %}
+
 <h2>Bienvenido, {{ session['usuario'] }}</h2>
-
-<!-- Formulario Efectivo Diario -->
-<div style="margin-bottom:20px; padding:10px; border:1px solid #ccc; border-radius:5px;">
-    <form method="POST" action="{{ url_for('inicio') }}">
-        <label for="fecha_efectivo">Fecha:</label>
-        <input type="date" name="fecha_efectivo" value="{{ datetime.utcnow().strftime('%Y-%m-%d') }}">
-        <label for="monto_efectivo">Efectivo diario (COP):</label>
-        <input type="number" name="monto_efectivo" step="0.01" placeholder="0.00">
-        <button type="submit">Registrar Efectivo</button>
-    </form>
-</div>
-
-<!-- Totales -->
-<div style="margin-bottom:20px;">
-    <p><strong>Total deuda actual:</strong> ${{ "{:,.0f}".format(total_deuda) }}</p>
-    <p><strong>Total efectivo diario:</strong> ${{ "{:,.0f}".format(total_efectivo) }}</p>
-    <p><strong>Total combinado (deuda + efectivo):</strong> ${{ "{:,.0f}".format(total_combinado) }}</p>
-</div>
+<h2>Clientes</h2>
 
 <!-- Filtro de clientes -->
-<input type="text" id="filtroCliente" onkeyup="filtrarTabla()" placeholder="Buscar cliente...">
+<input type="text" id="filtroCliente" placeholder="Filtrar por nombre..." onkeyup="filtrarTabla()">
 
 <!-- Tabla de clientes -->
 <table id="tablaClientes" border="1" cellpadding="5" cellspacing="0">
@@ -37,16 +21,16 @@
         </tr>
     </thead>
     <tbody>
-        {% for c in clientes %}
+        {% for cliente in clientes %}
         <tr>
-            <td>{{ c.id }}</td>
-            <td>{{ c.nombre }}</td>
-            <td>${{ "{:,.0f}".format(c.monto_prestado) }}</td>
-            <td>${{ "{:,.0f}".format(c.deuda_actual) }}</td>
-            <td>{{ c.fecha_registro.strftime('%Y-%m-%d') if c.fecha_registro else '' }}</td>
-            <td>{{ c.observacion or '' }}</td>
+            <td>{{ cliente.id }}</td>
+            <td>{{ cliente.nombre }}</td>
+            <td>${{ "{:,.2f}".format(cliente.monto_prestado) }}</td>
+            <td>${{ "{:,.2f}".format(cliente.deuda_actual) }}</td>
+            <td>{{ cliente.fecha_registro.strftime('%Y-%m-%d') }}</td>
+            <td>{{ cliente.observacion or '' }}</td>
             <td>
-                <form method="POST" action="{{ url_for('pago', cliente_id=c.id) }}">
+                <form method="POST" action="{{ url_for('pago', cliente_id=cliente.id) }}">
                     <input type="number" name="monto" step="0.01" placeholder="0.00" required>
                     <button type="submit">Registrar</button>
                 </form>
@@ -56,35 +40,20 @@
     </tbody>
 </table>
 
-<!-- Historial de Efectivo Diario -->
-<h3>Historial de Efectivo Diario</h3>
-<table border="1" cellpadding="5" cellspacing="0">
-    <thead>
-        <tr>
-            <th>ID</th>
-            <th>Fecha</th>
-            <th>Monto</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for e in efectivo_diario %}
-        <tr>
-            <td>{{ e.id }}</td>
-            <td>{{ e.fecha.strftime('%Y-%m-%d') }}</td>
-            <td>${{ "{:,.0f}".format(e.monto) }} COP</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<!-- Totales -->
+<h3>Total Deuda: ${{ "{:,.2f}".format(total_deuda) }}</h3>
+<h3>Total Efectivo: ${{ "{:,.2f}".format(total_efectivo) }}</h3>
+<h3>Total Combinado: ${{ "{:,.2f}".format(total_combinado) }}</h3>
 
-<!-- Script de filtrado -->
+<!-- Script de filtrado por nombre -->
 <script>
 function filtrarTabla() {
     var input = document.getElementById("filtroCliente");
     var filter = input.value.toUpperCase();
     var table = document.getElementById("tablaClientes");
     var tr = table.getElementsByTagName("tr");
-    for (var i = 1; i < tr.length; i++) {
+
+    for (var i = 1; i < tr.length; i++) { // saltar encabezado
         var td = tr[i].getElementsByTagName("td")[1]; // columna Nombre
         if (td) {
             var txtValue = td.textContent || td.innerText;
@@ -93,4 +62,5 @@ function filtrarTabla() {
     }
 }
 </script>
+
 {% endblock %}
