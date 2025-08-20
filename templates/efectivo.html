@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block contenido %}
+<h2>Registrar Efectivo Diario</h2>
+
+<form method="POST">
+    <label>Fecha:</label>
+    <input type="date" name="fecha_efectivo" value="{{ datetime.utcnow().strftime('%Y-%m-%d') }}">
+    <label>Monto (COP):</label>
+    <input type="number" step="0.01" name="monto_efectivo" placeholder="0.00">
+    <button type="submit">Registrar</button>
+</form>
+
+<h3>Historial de Efectivo Diario</h3>
+<table border="1" cellpadding="5" cellspacing="0">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Fecha</th>
+            <th>Monto</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for e in efectivo_diario %}
+        <tr>
+            <td>{{ e.id }}</td>
+            <td>{{ e.fecha.strftime('%Y-%m-%d') }}</td>
+            <td>{{ "{:,.0f}".format(e.monto) }} COP</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h3>Total Efectivo: {{ "{:,.0f}".format(total_efectivo) }} COP</h3>
+{% endblock %}
