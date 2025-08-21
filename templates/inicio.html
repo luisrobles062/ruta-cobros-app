@@ -1,32 +1,72 @@
 {% extends "base.html" %}
-{% block title %}Nuevo cliente - Ruta de Cobros{% endblock %}
+{% block title %}Clientes - Ruta de Cobros{% endblock %}
 {% block content %}
-<h1 class="h4 mb-3">Nuevo cliente</h1>
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h1 class="h4 mb-0">Clientes</h1>
+  <div>
+    <a class="btn btn-outline-secondary me-2" href="{{ url_for('pagos_listado') }}">Ver pagos</a>
+    <a class="btn btn-primary" href="{{ url_for('cliente_nuevo') }}">Nuevo cliente</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body">
+        <div class="text-muted">Total clientes</div>
+        <div class="fs-4 fw-bold">{{ total_clientes }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body">
+        <div class="text-muted">Total recaudado (histórico)</div>
+        <div class="fs-4 fw-bold">{{ total_recaudado }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="card border-0 shadow-sm">
   <div class="card-body">
-    <form method="POST" action="{{ url_for('cliente_nuevo') }}">
-      <div class="mb-3">
-        <label class="form-label">Nombre *</label>
-        <input name="nombre" class="form-control" required>
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Monto prestado *</label>
-        <input name="monto_prestado" class="form-control" type="number" step="0.01" min="0" required>
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Fecha del préstamo</label>
-        <input name="fecha_prestamo" class="form-control" type="date" value="{{ (cycler).__class__.__mro__[1].__init__.__globals__['__builtins__'].get('str', lambda x:x)(namespace=None) and '' }}" placeholder="AAAA-MM-DD">
-        {# truco para no forzar hoy; si quieres hoy por defecto: value="{{ (now().date()) }}" con ext. de jinja #}
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Observaciones</label>
-        <textarea name="observaciones" class="form-control" rows="2"></textarea>
-      </div>
-      <div class="d-flex gap-2">
-        <a class="btn btn-outline-secondary" href="{{ url_for('home') }}">Cancelar</a>
-        <button class="btn btn-primary">Guardar</button>
-      </div>
-    </form>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Monto prestado</th>
+            <th>Deuda actual</th>
+            <th>Fecha préstamo</th>
+            <th>Último pago</th>
+            <th>Observaciones</th>
+            <th style="width:160px;">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for c in clientes %}
+          <tr>
+            <td>{{ c[0] }}</td>
+            <td>{{ c[1] }}</td>
+            <td>{{ "${:,.2f}".format(c[2]|float) }}</td>
+            <td>{{ "${:,.2f}".format(c[3]|float) }}</td>
+            <td>{{ c[5] }}</td>
+            <td>{{ c[6] or '-' }}</td>
+            <td>{{ c[4] }}</td>
+            <td>
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('cliente_editar', cliente_id=c[0]) }}">Editar</a>
+              <form class="d-inline" method="POST" action="{{ url_for('cliente_eliminar', cliente_id=c[0]) }}" onsubmit="return confirm('¿Eliminar cliente?');">
+                <button class="btn btn-sm btn-outline-danger">Eliminar</button>
+              </form>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="8" class="text-center text-muted">Sin clientes aún.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 {% endblock %}
