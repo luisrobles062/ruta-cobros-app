@@ -1,7 +1,7 @@
 # app.py
 # -*- coding: utf-8 -*-
 import os
-from datetime import date, datetime
+from datetime import date
 from urllib.parse import urlparse, parse_qsl
 
 from flask import (
@@ -15,6 +15,7 @@ app.secret_key = os.environ.get("SECRET_KEY", "secreto")
 # ========= Conexión a Neon =========
 RAW_DATABASE_URL = os.getenv(
     "DATABASE_URL",
+    # DSN válido SIN channel_binding y SIN comillas
     "postgresql://neondb_owner:npg_DqyQpk4iBLh3@ep-still-water-adszkvnv-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require"
 ).strip()
 
@@ -48,9 +49,29 @@ def get_connection():
     dsn = " ".join(dsn_parts)
     return psycopg2.connect(dsn)
 
+# ========= Util ========
+def parse_amount(txt: str) -> float:
+    """
+    Convierte '1.234,56' o '1234.56' o '1,234.56' a float con robustez.
+    """
+    t = (txt or "").strip().replace(" ", "")
+    if "," in t and "." in t:
+        # asume coma como miles → quítalas
+        t = t.replace(",", "")
+    elif "," in t and "." not in t:
+        # asume coma como decimal
+        t = t.replace(",", ".")
+    return float(t)
+
+def money(n):
+    try:
+        return f"${float(n):,.2f}"
+    except Exception:
+        return n
+
 # ========= Migración / Esquema (modelo final + fechas + caja) =========
 MIGRATION_SQL = r"""
--- Base
+-- === BASE: asegura tablas ===
 CREATE TABLE IF NOT EXISTS clientes (
   id SERIAL PRIMARY KEY,
   nombre TEXT NOT NULL
@@ -65,7 +86,11 @@ CREATE TABLE IF NOT EXISTS pagos (
   nota TEXT
 );
 
--- Renombres si vienen de esquemas viejos
+-- === 1) QUITA TRIGGERS antes de alterar tipos/columnas ===
+DROP TRIGGER IF EXISTS trg_clientes_aiu ON clientes;
+DROP TRIGGER IF EXISTS trg_pagos_aiud   ON pagos;
+
+-- === 2) Renombres por esquemas viejos ===
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.columns
@@ -78,7 +103,7 @@ BEGIN
   END IF;
 END$$;
 
--- Columnas del modelo actual
+-- === 3) Añade columnas del modelo actual ===
 ALTER TABLE clientes
   ADD COLUMN IF NOT EXISTS monto_prestado NUMERIC(12,2) NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS deuda_actual  NUMERIC(12,2) NOT NULL DEFAULT 0,
@@ -86,27 +111,28 @@ ALTER TABLE clientes
   ADD COLUMN IF NOT EXISTS fecha_prestamo DATE NOT NULL DEFAULT CURRENT_DATE,
   ADD COLUMN IF NOT EXISTS fecha_ultimo_pago DATE;
 
+-- === 4) Tipos/constraints correctos (ya sin triggers molestando) ===
 ALTER TABLE clientes
   ALTER COLUMN monto_prestado TYPE NUMERIC(12,2) USING monto_prestado::numeric,
-  ALTER COLUMN deuda_actual  TYPE NUMERIC(12,2) USING deuda_actual::numeric,
+  ALTER COLUMN deuda_actual   TYPE NUMERIC(12,2) USING deuda_actual::numeric,
   ALTER COLUMN monto_prestado SET NOT NULL,
-  ALTER COLUMN deuda_actual  SET NOT NULL,
+  ALTER COLUMN deuda_actual   SET NOT NULL,
   ALTER COLUMN monto_prestado SET DEFAULT 0,
-  ALTER COLUMN deuda_actual  SET DEFAULT 0;
+  ALTER COLUMN deuda_actual   SET DEFAULT 0;
 
--- Limpieza de columnas antiguas que ya no quieres
+-- === 5) Limpia columnas que ya no quieres ===
 ALTER TABLE clientes
   DROP COLUMN IF EXISTS telefono,
   DROP COLUMN IF EXISTS documento,
   DROP COLUMN IF EXISTS fecha_registro;
 
--- Caja / efectivo diario
+-- === 6) Caja diaria ===
 CREATE TABLE IF NOT EXISTS efectivo_diario (
   fecha DATE PRIMARY KEY,
   monto NUMERIC(14,2) NOT NULL DEFAULT 0
 );
 
--- Funciones de recálculo
+-- === 7) Funciones de recálculo y fechas ===
 CREATE OR REPLACE FUNCTION recalc_deuda_fn(p_cid int)
 RETURNS void AS $$
 BEGIN
@@ -130,7 +156,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Triggers
+-- === 8) Triggers (recrear) ===
 CREATE OR REPLACE FUNCTION trg_clientes_recalc()
 RETURNS trigger AS $$
 BEGIN
@@ -139,7 +165,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_clientes_aiu ON clientes;
 CREATE TRIGGER trg_clientes_aiu
 AFTER INSERT OR UPDATE OF monto_prestado ON clientes
 FOR EACH ROW EXECUTE FUNCTION trg_clientes_recalc();
@@ -171,12 +196,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_pagos_aiud ON pagos;
 CREATE TRIGGER trg_pagos_aiud
 AFTER INSERT OR UPDATE OR DELETE ON pagos
 FOR EACH ROW EXECUTE FUNCTION trg_pagos_recalc();
 
--- Backfill fechas y deudas
+-- === 9) Backfill: alinear deudas y fechas existentes ===
 UPDATE clientes c
 SET fecha_ultimo_pago = sub.max_pago
 FROM (
@@ -212,19 +236,11 @@ try:
 except Exception as e:
     print("WARN init schema:", e)
 
-# ========= Helpers =========
-def money(n):
-    try:
-        return f"${float(n):,.2f}"
-    except Exception:
-        return n
-
-# Totales visibles siempre (navbar)
+# ========= Totales visibles en el navbar =========
 @app.context_processor
 def inject_totales():
     deuda_total = 0.0
     efectivo_hoy = 0.0
-    total_general = 0.0
     try:
         with get_connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT COALESCE(SUM(deuda_actual),0) FROM clientes;")
@@ -232,7 +248,7 @@ def inject_totales():
             cur.execute("SELECT COALESCE(monto,0) FROM efectivo_diario WHERE fecha = CURRENT_DATE;")
             row = cur.fetchone()
             efectivo_hoy = float((row[0] if row else 0) or 0)
-    except Exception as _:
+    except Exception:
         pass
     total_general = deuda_total + efectivo_hoy
     return dict(
@@ -242,7 +258,7 @@ def inject_totales():
         money=money
     )
 
-# ========= Salud / diagnóstico =========
+# ========= Salud =========
 @app.get("/health")
 def health():
     try:
@@ -264,7 +280,7 @@ def dbcheck():
 
 # ========= Rutas =========
 
-# Home: listado de clientes + totales
+# Home: listado de clientes + totales históricos
 @app.route("/")
 def home():
     conn = get_connection()
@@ -305,7 +321,7 @@ def login():
 @app.route("/clientes/nuevo", methods=["GET", "POST"])
 def cliente_nuevo():
     if request.method == "GET":
-        return render_template("nuevo.html")  # nombre, monto_prestado, observaciones, fecha_prestamo
+        return render_template("nuevo.html")  # nombre, monto_prestado, observaciones, fecha_prestamo (opcional)
 
     nombre = (request.form.get("nombre") or "").strip()
     monto_raw = (request.form.get("monto_prestado") or "").strip()
@@ -317,10 +333,10 @@ def cliente_nuevo():
         return redirect(url_for("cliente_nuevo"))
 
     try:
-        monto = float(monto_raw.replace(".", "").replace(",", "."))
+        monto = parse_amount(monto_raw)
         if monto < 0:
             raise ValueError
-    except ValueError:
+    except Exception:
         flash("El monto prestado debe ser un número válido (>= 0).", "warning")
         return redirect(url_for("cliente_nuevo"))
 
@@ -369,10 +385,10 @@ def cliente_editar(cliente_id):
             return redirect(url_for("cliente_editar", cliente_id=cliente_id))
 
         try:
-            monto = float(monto_raw.replace(".", "").replace(",", "."))
+            monto = parse_amount(monto_raw)
             if monto < 0:
                 raise ValueError
-        except ValueError:
+        except Exception:
             flash("El monto prestado debe ser un número válido (>= 0).", "warning")
             return redirect(url_for("cliente_editar", cliente_id=cliente_id))
 
@@ -447,10 +463,10 @@ def pago_nuevo():
         return redirect(url_for("pagos_listado"))
 
     try:
-        monto_norm = float((monto or "0").replace(".", "").replace(",", "."))
+        monto_norm = parse_amount(monto)
         if monto_norm <= 0:
             raise ValueError
-    except ValueError:
+    except Exception:
         flash("Monto inválido.", "warning")
         return redirect(url_for("pagos_listado"))
 
@@ -472,6 +488,62 @@ def pago_nuevo():
     finally:
         conn.close()
 
+@app.route("/pagos/<int:pago_id>/editar", methods=["GET", "POST"])
+def pago_editar(pago_id):
+    conn = get_connection()
+    try:
+        if request.method == "GET":
+            with conn, conn.cursor() as cur:
+                cur.execute("""
+                    SELECT p.id, p.monto, p.fecha_pago, p.metodo, p.nota, c.id, c.nombre
+                    FROM pagos p
+                    JOIN clientes c ON c.id = p.cliente_id
+                    WHERE p.id=%s;
+                """, (pago_id,))
+                pago = cur.fetchone()
+
+                cur.execute("SELECT id, nombre FROM clientes ORDER BY nombre;")
+                clientes = cur.fetchall()
+
+            if not pago:
+                flash("Pago no encontrado.", "warning")
+                return redirect(url_for("pagos_listado"))
+
+            return render_template("editar_pago.html", pago=pago, clientes=clientes)
+
+        cliente_id = request.form.get("cliente_id")
+        monto = request.form.get("monto")
+        metodo = (request.form.get("metodo") or "").strip()
+        nota = (request.form.get("nota") or "").strip()
+
+        try:
+            monto_norm = parse_amount(monto)
+        except Exception:
+            flash("Monto inválido.", "warning")
+            return redirect(url_for("pago_editar", pago_id=pago_id))
+
+        with conn, conn.cursor() as cur:
+            cur.execute("""
+                UPDATE pagos
+                SET cliente_id=%s, monto=%s, metodo=%s, nota=%s
+                WHERE id=%s;
+            """, (int(cliente_id), monto_norm, metodo, nota, pago_id))
+        flash("Pago actualizado.", "success")
+        return redirect(url_for("pagos_listado"))
+    finally:
+        conn.close()
+
+@app.route("/pagos/<int:pago_id>/eliminar", methods=["POST"])
+def pago_eliminar(pago_id):
+    conn = get_connection()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM pagos WHERE id=%s;", (pago_id,))
+        flash("Pago eliminado.", "success")
+        return redirect(url_for("pagos_listado"))
+    finally:
+        conn.close()
+
 # -------- Efectivo (caja diaria) --------
 @app.route("/efectivo", methods=["GET", "POST"])
 def efectivo():
@@ -479,10 +551,10 @@ def efectivo():
         monto = (request.form.get("monto") or "").strip()
         fecha_str = (request.form.get("fecha") or "").strip()
         try:
-            monto_norm = float(monto.replace(".", "").replace(",", "."))
+            monto_norm = parse_amount(monto)
             if monto_norm < 0:
                 raise ValueError
-        except ValueError:
+        except Exception:
             flash("Monto de efectivo inválido.", "warning")
             return redirect(url_for("efectivo"))
 
