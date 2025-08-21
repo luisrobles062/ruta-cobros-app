@@ -36,10 +36,10 @@
           <tr>
             <th>ID</th>
             <th>Nombre</th>
-            <th>Teléfono</th>
-            <th>Documento</th>
-            <th>Fecha registro</th>
-            <th style="width:140px;">Acciones</th>
+            <th>Monto prestado</th>
+            <th>Deuda actual</th>
+            <th>Observaciones</th>
+            <th style="width:160px;">Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -47,8 +47,8 @@
           <tr>
             <td>{{ c[0] }}</td>
             <td>{{ c[1] }}</td>
-            <td>{{ c[2] or '' }}</td>
-            <td>{{ c[3] or '' }}</td>
+            <td>{{ "${:,.2f}".format(c[2]|float) }}</td>
+            <td>{{ "${:,.2f}".format(c[3]|float) }}</td>
             <td>{{ c[4] }}</td>
             <td>
               <a class="btn btn-sm btn-outline-primary" href="{{ url_for('cliente_editar', cliente_id=c[0]) }}">Editar</a>
