@@ -1,7 +1,6 @@
 # app.py
 # -*- coding: utf-8 -*-
 import os
-from pathlib import Path
 from datetime import date
 from urllib.parse import urlparse, parse_qsl
 
@@ -16,7 +15,6 @@ app.secret_key = os.environ.get("SECRET_KEY", "secreto")
 # ========= Conexión a Neon =========
 RAW_DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    # DSN válido SIN channel_binding y SIN comillas
     "postgresql://neondb_owner:npg_DqyQpk4iBLh3@ep-still-water-adszkvnv-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require"
 ).strip()
 
@@ -50,51 +48,114 @@ def get_connection():
     dsn = " ".join(dsn_parts)
     return psycopg2.connect(dsn)
 
-# ========= Migración / Esquema =========
+# ========= Migración / Esquema + TRIGGERS =========
+MIGRATION_SQL = """
+-- 1) Crear tablas si no existen (mínimas)
+CREATE TABLE IF NOT EXISTS clientes (
+    id SERIAL PRIMARY KEY,
+    nombre TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS pagos (
+    id SERIAL PRIMARY KEY,
+    cliente_id INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+    monto NUMERIC(14,2) NOT NULL,
+    fecha_pago DATE NOT NULL DEFAULT CURRENT_DATE,
+    metodo TEXT,
+    nota TEXT
+);
+
+-- 2) Asegurar columnas del modelo final
+ALTER TABLE clientes
+    ADD COLUMN IF NOT EXISTS monto_prestado NUMERIC(12,2) NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS deuda_actual  NUMERIC(12,2) NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS observaciones TEXT;
+
+-- 3) Quitar columnas que ya no quieres
+ALTER TABLE clientes
+    DROP COLUMN IF EXISTS telefono,
+    DROP COLUMN IF EXISTS documento;
+
+-- (Si existiera fecha_registro y no la quieres, descomenta:)
+-- ALTER TABLE clientes DROP COLUMN IF EXISTS fecha_registro;
+
+-- 4) Función genérica para recalcular deuda_actual
+CREATE OR REPLACE FUNCTION recalc_deuda_fn(p_cid int)
+RETURNS void AS $$
+BEGIN
+  UPDATE clientes c
+  SET deuda_actual = GREATEST(
+      0,
+      c.monto_prestado - COALESCE( (SELECT SUM(monto) FROM pagos WHERE cliente_id = p_cid), 0)
+  )
+  WHERE c.id = p_cid;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 5) Trigger en CLIENTES: al insertar o cambiar monto_prestado, recalcular
+CREATE OR REPLACE FUNCTION trg_clientes_recalc()
+RETURNS trigger AS $$
+BEGIN
+  PERFORM recalc_deuda_fn(NEW.id);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_clientes_aiu ON clientes;
+CREATE TRIGGER trg_clientes_aiu
+AFTER INSERT OR UPDATE OF monto_prestado ON clientes
+FOR EACH ROW EXECUTE FUNCTION trg_clientes_recalc();
+
+-- 6) Trigger en PAGOS: al insertar/editar/eliminar, recalcular la(s) deuda(s)
+CREATE OR REPLACE FUNCTION trg_pagos_recalc()
+RETURNS trigger AS $$
+BEGIN
+  IF (TG_OP = 'INSERT') THEN
+    PERFORM recalc_deuda_fn(NEW.cliente_id);
+    RETURN NEW;
+  ELSIF (TG_OP = 'UPDATE') THEN
+    IF (NEW.cliente_id <> OLD.cliente_id) THEN
+      PERFORM recalc_deuda_fn(OLD.cliente_id);
+      PERFORM recalc_deuda_fn(NEW.cliente_id);
+    ELSE
+      PERFORM recalc_deuda_fn(NEW.cliente_id);
+    END IF;
+    RETURN NEW;
+  ELSIF (TG_OP = 'DELETE') THEN
+    PERFORM recalc_deuda_fn(OLD.cliente_id);
+    RETURN OLD;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_pagos_aiud ON pagos;
+CREATE TRIGGER trg_pagos_aiud
+AFTER INSERT OR UPDATE OR DELETE ON pagos
+FOR EACH ROW EXECUTE FUNCTION trg_pagos_recalc();
+
+-- 7) Backfill: alinear deuda_actual de todos los clientes con pagos existentes
+--    Primero, pones deuda_actual = monto_prestado si no hay pagos:
+UPDATE clientes c
+SET deuda_actual = c.monto_prestado
+WHERE NOT EXISTS (SELECT 1 FROM pagos p WHERE p.cliente_id = c.id);
+
+--    Luego, para los que sí tienen pagos, restar suma de pagos:
+UPDATE clientes c
+SET deuda_actual = GREATEST(0, c.monto_prestado - p.total)
+FROM (
+  SELECT cliente_id, COALESCE(SUM(monto),0) AS total
+  FROM pagos
+  GROUP BY cliente_id
+) p
+WHERE c.id = p.cliente_id;
+"""
+
 def init_schema():
-    """
-    - Crea tablas si no existen.
-    - Migra 'clientes' añadiendo columnas faltantes (telefono, documento, fecha_registro)
-      para compatibilidad con bases viejas que solo tenían nombre/montos/observaciones.
-    """
     conn = get_connection()
     try:
         with conn, conn.cursor() as cur:
-            # Asegurar tabla clientes (mínima para poder ALTER)
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS clientes (
-                    id SERIAL PRIMARY KEY,
-                    nombre TEXT NOT NULL
-                );
-            """)
-
-            # Ver columnas existentes
-            cur.execute("""
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_schema='public' AND table_name='clientes';
-            """)
-            existentes = {r[0] for r in cur.fetchall()}
-
-            # Añadir columnas nuevas si faltan (idempotente)
-            if 'telefono' not in existentes:
-                cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS telefono TEXT;")
-            if 'documento' not in existentes:
-                cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS documento TEXT;")
-            if 'fecha_registro' not in existentes:
-                cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS fecha_registro DATE DEFAULT CURRENT_DATE;")
-
-            # Asegurar tabla pagos (completa)
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS pagos (
-                    id SERIAL PRIMARY KEY,
-                    cliente_id INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
-                    monto NUMERIC(14,2) NOT NULL,
-                    fecha_pago DATE NOT NULL DEFAULT CURRENT_DATE,
-                    metodo TEXT,
-                    nota TEXT
-                );
-            """)
+            cur.execute(MIGRATION_SQL)
     finally:
         conn.close()
 
@@ -105,8 +166,6 @@ except Exception as e:
     print("WARN init schema:", e)
 
 # ========= Helpers =========
-TEMPLATES_DIR = Path(__file__).parent / "templates"
-
 def money(n):
     try:
         return f"${float(n):,.2f}"
@@ -135,14 +194,14 @@ def dbcheck():
 
 # ========= Rutas =========
 
-# Home: Dashboard con listado de clientes + conteos
+# Home: listado de clientes + totales
 @app.route("/")
 def home():
     conn = get_connection()
     try:
         with conn, conn.cursor() as cur:
             cur.execute("""
-                SELECT id, nombre, telefono, documento, fecha_registro
+                SELECT id, nombre, monto_prestado, deuda_actual, COALESCE(observaciones,'') AS obs
                 FROM clientes
                 ORDER BY id DESC;
             """)
@@ -163,7 +222,7 @@ def home():
     finally:
         conn.close()
 
-# -------- Login (opcional; hoy no bloquea rutas) --------
+# -------- Login (opcional) --------
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
@@ -175,22 +234,34 @@ def login():
 @app.route("/clientes/nuevo", methods=["GET", "POST"])
 def cliente_nuevo():
     if request.method == "GET":
-        return render_template("nuevo.html")
-    nombre = request.form.get("nombre", "").strip()
-    telefono = request.form.get("telefono", "").strip()
-    documento = request.form.get("documento", "").strip()
+        return render_template("nuevo.html")  # formulario: nombre, monto_prestado, observaciones
 
-    if not nombre:
-        flash("El nombre es obligatorio.", "warning")
+    nombre = (request.form.get("nombre") or "").strip()
+    monto_raw = (request.form.get("monto_prestado") or "").strip()
+    observaciones = (request.form.get("observaciones") or "").strip()
+
+    if not nombre or not monto_raw:
+        flash("Nombre y monto prestado son obligatorios.", "warning")
+        return redirect(url_for("cliente_nuevo"))
+
+    try:
+        monto = float(monto_raw)
+        if monto < 0:
+            raise ValueError
+    except ValueError:
+        flash("El monto prestado debe ser un número válido (>= 0).", "warning")
         return redirect(url_for("cliente_nuevo"))
 
     conn = get_connection()
     try:
         with conn, conn.cursor() as cur:
             cur.execute("""
-                INSERT INTO clientes (nombre, telefono, documento, fecha_registro)
-                VALUES (%s, %s, %s, %s);
-            """, (nombre, telefono, documento, date.today()))
+                INSERT INTO clientes (nombre, monto_prestado, deuda_actual, observaciones)
+                VALUES (%s, %s, %s, %s)
+                RETURNING id;
+            """, (nombre, monto, monto, observaciones))
+            _ = cur.fetchone()[0]
+            # Trigger de clientes recalcularía igual, pero dejamos deuda_actual = monto al inicio
         flash("Cliente creado correctamente.", "success")
         return redirect(url_for("home"))
     finally:
@@ -203,7 +274,7 @@ def cliente_editar(cliente_id):
         if request.method == "GET":
             with conn, conn.cursor() as cur:
                 cur.execute("""
-                    SELECT id, nombre, telefono, documento, fecha_registro
+                    SELECT id, nombre, monto_prestado, deuda_actual, COALESCE(observaciones,'')
                     FROM clientes WHERE id=%s;
                 """, (cliente_id,))
                 cliente = cur.fetchone()
@@ -212,20 +283,29 @@ def cliente_editar(cliente_id):
                     return redirect(url_for("home"))
             return render_template("editar_cliente.html", cliente=cliente)
 
-        nombre = request.form.get("nombre", "").strip()
-        telefono = request.form.get("telefono", "").strip()
-        documento = request.form.get("documento", "").strip()
+        nombre = (request.form.get("nombre") or "").strip()
+        monto_raw = (request.form.get("monto_prestado") or "").strip()
+        observaciones = (request.form.get("observaciones") or "").strip()
 
-        if not nombre:
-            flash("El nombre es obligatorio.", "warning")
+        if not nombre or not monto_raw:
+            flash("Nombre y monto prestado son obligatorios.", "warning")
+            return redirect(url_for("cliente_editar", cliente_id=cliente_id))
+
+        try:
+            monto = float(monto_raw)
+            if monto < 0:
+                raise ValueError
+        except ValueError:
+            flash("El monto prestado debe ser un número válido (>= 0).", "warning")
             return redirect(url_for("cliente_editar", cliente_id=cliente_id))
 
         with conn, conn.cursor() as cur:
             cur.execute("""
                 UPDATE clientes
-                SET nombre=%s, telefono=%s, documento=%s
+                SET nombre=%s, monto_prestado=%s, observaciones=%s
                 WHERE id=%s;
-            """, (nombre, telefono, documento, cliente_id))
+            """, (nombre, monto, observaciones, cliente_id))
+            # Trigger actualizará deuda_actual en base a pagos
         flash("Cliente actualizado.", "success")
         return redirect(url_for("home"))
     finally:
@@ -276,12 +356,12 @@ def pagos_listado():
 def pago_nuevo():
     cliente_id = request.form.get("cliente_id")
     monto = request.form.get("monto")
-    metodo = request.form.get("metodo", "").strip()
-    nota = request.form.get("nota", "").strip()
+    metodo = (request.form.get("metodo") or "").strip()
+    nota = (request.form.get("nota") or "").strip()
 
     if not cliente_id or not monto:
         flash("Cliente y monto son obligatorios.", "warning")
-        return redirect(url_for('pagos_listado'))
+        return redirect(url_for("pagos_listado"))
 
     conn = get_connection()
     try:
@@ -320,8 +400,8 @@ def pago_editar(pago_id):
 
         cliente_id = request.form.get("cliente_id")
         monto = request.form.get("monto")
-        metodo = request.form.get("metodo", "").strip()
-        nota = request.form.get("nota", "").strip()
+        metodo = (request.form.get("metodo") or "").strip()
+        nota = (request.form.get("nota") or "").strip()
 
         if not cliente_id or not monto:
             flash("Cliente y monto son obligatorios.", "warning")
