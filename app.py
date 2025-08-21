@@ -545,67 +545,105 @@ def pago_eliminar(pago_id):
         conn.close()
 
 # -------- Efectivo (caja diaria) --------
+# --- pega esto reemplazando toda tu función efectivo() ---
+from decimal import Decimal, InvalidOperation
+
+def _parse_amount_relajado(txt: str):
+    """
+    123,45  -> 123.45
+    1.234,56 -> 1234.56
+    1,234.56 -> 1234.56
+    "" -> None
+    """
+    if txt is None:
+        return None
+    t = txt.strip()
+    if not t:
+        return None
+    # quita separadores comunes y símbolos
+    for ch in ["$", "€", "₡", "₲", "₵", "£", "¥", "₿", " "]:
+        t = t.replace(ch, "")
+    if "," in t and "." in t:
+        if t.rfind(",") > t.rfind("."):
+            # coma decimal
+            t = t.replace(".", "").replace(",", ".")
+        else:
+            # punto decimal
+            t = t.replace(",", "")
+    elif "," in t and "." not in t:
+        t = t.replace(",", ".")
+    return t
+
 @app.route("/efectivo", methods=["GET", "POST"])
 def efectivo():
     if request.method == "POST":
-        monto_txt = (request.form.get("monto") or "").strip()
-        fecha_str = (request.form.get("fecha") or "").strip()
+        try:
+            monto_txt = (request.form.get("monto") or "").strip()
+            fecha_str = (request.form.get("fecha") or "").strip()
 
-        # Permite: vacío = 0.00; números normales tipo 123 o 123.45
-        if monto_txt == "":
-            monto_norm = 0.0
-        else:
-            try:
-                # Caso normal: "123" o "123.45"
-                monto_norm = float(monto_txt)
-            except Exception:
-                # Si el navegador mete formato raro, intentamos el parser tolerante
+            # 1) Parseo robusto del monto
+            if monto_txt == "":
+                monto = Decimal("0.00")
+            else:
                 try:
-                    monto_norm = parse_amount(monto_txt)
-                except Exception:
-                    flash("Monto de efectivo inválido.", "warning")
-                    return redirect(url_for("efectivo"))
+                    # primero intenta estilo "normal" 123 o 123.45
+                    monto = Decimal(monto_txt)
+                except InvalidOperation:
+                    # intenta el parser relajado (coma, miles, etc.)
+                    normalizado = _parse_amount_relajado(monto_txt)
+                    if not normalizado:
+                        monto = Decimal("0.00")
+                    else:
+                        monto = Decimal(normalizado)
 
-        if monto_norm < 0:
-            flash("El monto no puede ser negativo.", "warning")
-            return redirect(url_for("efectivo"))
+            if monto < 0:
+                flash("El monto de efectivo no puede ser negativo.", "warning")
+                return redirect(url_for("efectivo"))
 
-        # Fecha: si la dejas vacía, se usa HOY
-        try:
-            f = date.fromisoformat(fecha_str) if fecha_str else date.today()
-        except Exception:
-            flash("Fecha inválida (usa AAAA-MM-DD).", "warning")
-            return redirect(url_for("efectivo"))
+            # Redondea a 2 decimales
+            monto = monto.quantize(Decimal("0.01"))
 
-        conn = get_connection()
-        try:
-            with conn, conn.cursor() as cur:
+            # 2) Fecha: si viene vacía, usa hoy
+            try:
+                f = date.fromisoformat(fecha_str) if fecha_str else date.today()
+            except Exception:
+                flash("Fecha inválida (usa AAAA-MM-DD).", "warning")
+                return redirect(url_for("efectivo"))
+
+            # 3) DB: asegura tabla y guarda
+            with get_connection() as conn, conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS efectivo_diario (
+                      fecha DATE PRIMARY KEY,
+                      monto NUMERIC(14,2) NOT NULL DEFAULT 0
+                    );
+                """)
                 cur.execute("""
                     INSERT INTO efectivo_diario (fecha, monto)
                     VALUES (%s, %s)
                     ON CONFLICT (fecha) DO UPDATE SET monto = EXCLUDED.monto;
-                """, (f, monto_norm))
+                """, (f, monto))
             flash("Efectivo guardado.", "success")
             return redirect(url_for("efectivo"))
-        finally:
-            conn.close()
 
-    # GET
-    conn = get_connection()
-    try:
-        with conn, conn.cursor() as cur:
-            cur.execute("SELECT COALESCE(monto,0) FROM efectivo_diario WHERE fecha=CURRENT_DATE;")
-            row = cur.fetchone()
-            efectivo_hoy = float((row[0] if row else 0) or 0)
-            cur.execute("""
-                SELECT fecha, monto FROM efectivo_diario
-                ORDER BY fecha DESC
-                LIMIT 14;
-            """)
-            historico = cur.fetchall()
-        return render_template("efectivo.html", efectivo_hoy=efectivo_hoy, historico=historico)
-    finally:
-        conn.close()
+        except Exception as e:
+            # Cualquier error: mensaje amigable en UI (y log en Render)
+            print("ERROR /efectivo POST:", repr(e))
+            flash(f"Error al guardar efectivo: {e}", "warning")
+            return redirect(url_for("efectivo"))
+
+    # GET (sin cambios mayores)
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT COALESCE(monto,0) FROM efectivo_diario WHERE fecha=CURRENT_DATE;")
+        row = cur.fetchone()
+        efectivo_hoy = float((row[0] if row else 0) or 0)
+        cur.execute("""
+            SELECT fecha, monto FROM efectivo_diario
+            ORDER BY fecha DESC
+            LIMIT 14;
+        """)
+        historico = cur.fetchall()
+    return render_template("efectivo.html", efectivo_hoy=efectivo_hoy, historico=historico)
 
 # -------- Main --------
 if __name__ == "__main__":
