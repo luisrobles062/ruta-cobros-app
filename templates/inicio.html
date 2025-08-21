@@ -1,66 +1,68 @@
 {% extends "base.html" %}
+{% block title %}Clientes - Ruta de Cobros{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h1 class="h4 mb-0">Clientes</h1>
+  <div>
+    <a class="btn btn-outline-secondary me-2" href="{{ url_for('pagos_listado') }}">Ver pagos</a>
+    <a class="btn btn-primary" href="{{ url_for('cliente_nuevo') }}">Nuevo cliente</a>
+  </div>
+</div>
 
-{% block contenido %}
-<h2>Bienvenido, {{ session['usuario'] }}</h2>
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body">
+        <div class="text-muted">Total clientes</div>
+        <div class="fs-4 fw-bold">{{ total_clientes }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body">
+        <div class="text-muted">Total recaudado</div>
+        <div class="fs-4 fw-bold">{{ total_recaudado }}</div>
+      </div>
+    </div>
+  </div>
+</div>
 
-<h2>Clientes</h2>
-
-<!-- Filtro por cliente -->
-<input type="text" id="filtroCliente" placeholder="Filtrar por nombre..." onkeyup="filtrarTabla()">
-
-<!-- Tabla de clientes -->
-<table id="tablaClientes" border="1" cellpadding="5" cellspacing="0">
-    <thead>
-        <tr>
+<div class="card border-0 shadow-sm">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead class="table-light">
+          <tr>
             <th>ID</th>
             <th>Nombre</th>
-            <th>Monto prestado</th>
-            <th>Deuda actual</th>
+            <th>Teléfono</th>
+            <th>Documento</th>
             <th>Fecha registro</th>
-            <th>Observación</th>
-            <th>Registrar pago</th>
-        </tr>
-    </thead>
-    <tbody>
+            <th style="width:140px;">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
         {% for c in clientes %}
-        <tr>
-            <td>{{ c.id }}</td>
-            <td>{{ c.nombre }}</td>
-            <td>${{ "{:,.2f}".format(c.monto_prestado) }}</td>
-            <td>${{ "{:,.2f}".format(c.deuda_actual) }}</td>
-            <td>{{ c.fecha_registro.strftime('%Y-%m-%d') }}</td>
-            <td>{{ c.observacion or '' }}</td>
+          <tr>
+            <td>{{ c[0] }}</td>
+            <td>{{ c[1] }}</td>
+            <td>{{ c[2] or '' }}</td>
+            <td>{{ c[3] or '' }}</td>
+            <td>{{ c[4] }}</td>
             <td>
-                <form method="POST" action="{{ url_for('pago', cliente_id=c.id) }}">
-                    <input type="number" name="monto" step="0.01" placeholder="0.00" required>
-                    <button type="submit">Registrar</button>
-                </form>
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('cliente_editar', cliente_id=c[0]) }}">Editar</a>
+              <form class="d-inline" method="POST" action="{{ url_for('cliente_eliminar', cliente_id=c[0]) }}" onsubmit="return confirm('¿Eliminar cliente?');">
+                <button class="btn btn-sm btn-outline-danger">Eliminar</button>
+              </form>
             </td>
-        </tr>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="text-center text-muted">Sin clientes aún.</td></tr>
         {% endfor %}
-    </tbody>
-</table>
-
-<!-- Totales -->
-<h3>Total Deuda: ${{ "{:,.2f}".format(total_deuda) }}</h3>
-<h3>Total Efectivo: ${{ "{:,.2f}".format(total_efectivo) }}</h3>
-<h3>Total Combinado: ${{ "{:,.2f}".format(total_combinado) }}</h3>
-
-<script>
-function filtrarTabla() {
-    var input = document.getElementById("filtroCliente");
-    var filter = input.value.toUpperCase();
-    var table = document.getElementById("tablaClientes");
-    var tr = table.getElementsByTagName("tr");
-
-    for (var i = 1; i < tr.length; i++) {
-        var td = tr[i].getElementsByTagName("td")[1]; // columna Nombre
-        if (td) {
-            var txtValue = td.textContent || td.innerText;
-            tr[i].style.display = txtValue.toUpperCase().indexOf(filter) > -1 ? "" : "none";
-        }
-    }
-}
-</script>
-
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
 {% endblock %}
