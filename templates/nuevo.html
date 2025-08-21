@@ -10,12 +10,12 @@
         <input name="nombre" class="form-control" required>
       </div>
       <div class="mb-3">
-        <label class="form-label">Teléfono</label>
-        <input name="telefono" class="form-control">
+        <label class="form-label">Monto prestado *</label>
+        <input name="monto_prestado" class="form-control" type="number" step="0.01" min="0" required>
       </div>
       <div class="mb-3">
-        <label class="form-label">Documento</label>
-        <input name="documento" class="form-control">
+        <label class="form-label">Observaciones</label>
+        <textarea name="observaciones" class="form-control" rows="2"></textarea>
       </div>
       <div class="d-flex gap-2">
         <a class="btn btn-outline-secondary" href="{{ url_for('home') }}">Cancelar</a>
