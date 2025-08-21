@@ -1,28 +1,60 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_from_directory
+# app.py
+# -*- coding: utf-8 -*-
+from flask import (
+    Flask, render_template, request, redirect,
+    url_for, session, flash, jsonify, send_from_directory
+)
 import psycopg2
 import psycopg2.extras
 import os
 
 app = Flask(__name__)
 
-# --- Configuración segura ---
-app.secret_key = os.getenv("SECRET_KEY", "secreto")  # usa SECRET_KEY en producción
+# ------------------ Configuración ------------------
+app.secret_key = os.getenv("SECRET_KEY", "secreto")  # define SECRET_KEY en Render para producción
 
-# Usa variable de entorno si está disponible (recomendado en Render/Neon)
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://neondb_owner:npg_DqyQpk4iBLh3@ep-still-water-adszkvnv-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
-)
+RAW_DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+
+def _sanitize_dsn(dsn: str) -> str:
+    """Limpia comillas accidentales y elimina 'channel_binding' si lo pegaron desde Neon."""
+    dsn = (dsn or "").strip().strip('\'"').strip()
+    if not dsn:
+        return dsn
+    # El parámetro channel_binding rompe en psycopg2: lo quitamos si viene
+    if "channel_binding=" in dsn and "?" in dsn:
+        base, qs = dsn.split("?", 1)
+        kvs = [p for p in qs.split("&") if not p.startswith("channel_binding=")]
+        dsn = base + ("?" + "&".join(kvs) if kvs else "")
+    return dsn
+
+DATABASE_URL = _sanitize_dsn(RAW_DATABASE_URL)
 
 def get_db_connection():
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL no está definido. Configúralo en el panel de Render.")
     return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.DictCursor)
 
-# ----------------- RUTAS AUX -----------------
+# ------------------ Utilidades ------------------
+def require_login():
+    if "usuario" not in session:
+        return False
+    return True
+
+# ------------------ Rutas auxiliares ------------------
 @app.get("/health")
 def health():
     return jsonify(status="ok")
 
-# Sirve un favicon vacío si no tienes archivo (evita el 404 ruidoso)
+@app.get("/dbcheck")
+def dbcheck():
+    try:
+        with get_db_connection() as conn, conn.cursor() as cur:
+            cur.execute("SELECT 1;")
+            row = cur.fetchone()
+        return jsonify(db="ok" if row and row[0] == 1 else "fail")
+    except Exception as e:
+        return jsonify(db="error", detail=str(e)), 500
+
 @app.get("/favicon.ico")
 def favicon():
     static_path = os.path.join(app.root_path, "static")
@@ -31,26 +63,20 @@ def favicon():
         return send_from_directory(static_path, "favicon.ico", mimetype="image/x-icon")
     return ("", 204)
 
-# ----------------- LOGIN -----------------
+# ------------------ Login ------------------
 @app.route("/", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        # Soportar JSON y formularios
-        data = {}
-        if request.is_json:
-            data = request.get_json(silent=True) or {}
-        else:
-            data = request.form or {}
-
-        usuario = data.get("usuario", "").strip()
-        contrasena = data.get("contrasena", "").strip()
+        # Soporta JSON y formulario
+        data = request.get_json(silent=True) if request.is_json else request.form
+        usuario = (data.get("usuario") or "").strip()
+        contrasena = (data.get("contrasena") or "").strip()  # OJO: 'contrasena' sin ñ para coincidir con el form
 
         if not usuario or not contrasena:
-            # No devolvemos 400: mostramos el error y mantenemos 200 para UX
             flash("Por favor, completa usuario y contraseña.")
             return render_template("login.html"), 200
 
-        # Demo fija: admin/admin (ajusta con DB si quieres)
+        # Demo simple: admin/admin. Ajusta para usar DB si lo deseas.
         if usuario == "admin" and contrasena == "admin":
             session["usuario"] = usuario
             return redirect(url_for("inicio"))
@@ -60,15 +86,15 @@ def login():
 
     return render_template("login.html")
 
-@app.route("/logout")
+@app.get("/logout")
 def logout():
     session.clear()
     return redirect(url_for("login"))
 
-# ----------------- CLIENTES -----------------
-@app.route("/inicio")
+# ------------------ Clientes ------------------
+@app.get("/inicio")
 def inicio():
-    if "usuario" not in session:
+    if not require_login():
         return redirect(url_for("login"))
     conn = get_db_connection()
     try:
@@ -81,22 +107,18 @@ def inicio():
 
 @app.route("/nuevo", methods=["GET", "POST"])
 def nuevo_cliente():
-    if "usuario" not in session:
+    if not require_login():
         return redirect(url_for("login"))
 
     if request.method == "POST":
-        # Acepta JSON y formulario
         data = request.get_json(silent=True) if request.is_json else request.form
-
         nombre = (data.get("nombre") or "").strip()
         monto_raw = (data.get("monto") or "").strip()
         observaciones = (data.get("observaciones") or "").strip()
 
-        # Validaciones simples
         if not nombre or not monto_raw:
             flash("Nombre y monto son obligatorios.")
             return redirect(url_for("nuevo_cliente"))
-
         try:
             monto = float(monto_raw)
         except ValueError:
@@ -104,7 +126,6 @@ def nuevo_cliente():
             return redirect(url_for("nuevo_cliente"))
 
         deuda = monto
-
         conn = get_db_connection()
         try:
             with conn.cursor() as cur:
@@ -124,10 +145,10 @@ def nuevo_cliente():
 
     return render_template("nuevo_cliente.html")
 
-# ----------------- PAGOS -----------------
-@app.route("/pago/<int:id>", methods=["POST"])
+# ------------------ Pagos ------------------
+@app.post("/pago/<int:id>")
 def registrar_pago(id):
-    if "usuario" not in session:
+    if not require_login():
         return redirect(url_for("login"))
 
     data = request.get_json(silent=True) if request.is_json else request.form
@@ -161,8 +182,9 @@ def registrar_pago(id):
 
     return redirect(url_for("inicio"))
 
-# ----------------- INICIALIZACIÓN -----------------
+# ------------------ Inicialización ------------------
 def crear_tabla():
+    """Crea la tabla si no existe (idempotente)."""
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -180,6 +202,7 @@ def crear_tabla():
         conn.close()
 
 if __name__ == "__main__":
+    # En Render ejecutas con: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2
+    # Pero si corres local, esto levanta el servidor dev:
     crear_tabla()
-    # En Render usarás gunicorn: web: gunicorn app:app
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
