@@ -1,5 +1,86 @@
-<!-- Dentro del form de registrar pago -->
-<div class="mb-2">
-  <label class="form-label">Fecha de pago</label>
-  <input class="form-control" type="date" name="fecha_pago">
+{% extends "base.html" %}
+{% block title %}Pagos - Ruta de Cobros{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h1 class="h4 mb-0">Pagos</h1>
+  <a class="btn btn-outline-secondary" href="{{ url_for('home') }}">Volver a clientes</a>
 </div>
+
+<div class="row g-3">
+  <div class="col-md-5">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body">
+        <h2 class="h6">Registrar pago</h2>
+        <form method="POST" action="{{ url_for('pago_nuevo') }}">
+          <div class="mb-2">
+            <label class="form-label">Cliente *</label>
+            <select class="form-select" name="cliente_id" required>
+              <option value="" disabled selected>Selecciona un cliente</option>
+              {% for c in clientes %}
+                <option value="{{ c[0] }}">{{ c[1] }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Monto *</label>
+            <input class="form-control" type="number" name="monto" step="0.01" min="0.01" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Fecha de pago</label>
+            <input class="form-control" type="date" name="fecha_pago">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Método</label>
+            <input class="form-control" type="text" name="metodo" placeholder="efectivo, transferencia...">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Nota</label>
+            <input class="form-control" type="text" name="nota">
+          </div>
+          <button class="btn btn-primary">Guardar pago</button>
+        </form>
+      </div>
+    </div>
+    <div class="mt-3 small text-muted">
+      Total recaudado (histórico): <strong>{{ total_recaudado }}</strong>
+    </div>
+  </div>
+
+  <div class="col-md-7">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body">
+        <h2 class="h6">Historial de pagos</h2>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>ID</th><th>Cliente</th><th>Monto</th><th>Fecha</th><th>Método</th><th>Nota</th><th style="width:130px;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in pagos %}
+              <tr>
+                <td>{{ p[0] }}</td>
+                <td>{{ p[6] }}</td>
+                <td>{{ "${:,.2f}".format(p[1]|float) }}</td>
+                <td>{{ p[2] }}</td>
+                <td>{{ p[3] or "-" }}</td>
+                <td>{{ p[4] or "-" }}</td>
+                <td>
+                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('pago_editar', pago_id=p[0]) }}">Editar</a>
+                  <form class="d-inline" method="POST" action="{{ url_for('pago_eliminar', pago_id=p[0]) }}" onsubmit="return confirm('¿Eliminar pago?');">
+                    <button class="btn btn-sm btn-outline-danger">Eliminar</button>
+                  </form>
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="7" class="text-center text-muted">Sin pagos registrados.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
