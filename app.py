@@ -3,6 +3,7 @@
 import os
 from datetime import date
 from urllib.parse import urlparse, parse_qsl
+from decimal import Decimal, InvalidOperation
 
 from flask import (
     Flask, render_template, request, redirect, url_for, flash, jsonify
@@ -49,17 +50,26 @@ def get_connection():
     dsn = " ".join(dsn_parts)
     return psycopg2.connect(dsn)
 
-# ========= Util ========
+# ========= Utils =========
 def parse_amount(txt: str) -> float:
     """
-    Convierte '1.234,56' o '1234.56' o '1,234.56' a float con robustez.
+    Convierte '1.234,56', '1,234.56', '$ 1 234,56', '1234.56' -> float.
+    Lanza excepción si no es número.
     """
-    t = (txt or "").strip().replace(" ", "")
+    if txt is None:
+        raise ValueError("empty")
+    t = txt.strip()
+    if not t:
+        raise ValueError("empty")
+    # quita símbolos y espacios
+    for ch in ["$", "€", "₡", "₲", "₵", "£", "¥", "₿", " "]:
+        t = t.replace(ch, "")
     if "," in t and "." in t:
-        # asume coma como miles → quítalas
-        t = t.replace(",", "")
+        if t.rfind(",") > t.rfind("."):
+            t = t.replace(".", "").replace(",", ".")  # coma decimal
+        else:
+            t = t.replace(",", "")                    # punto decimal
     elif "," in t and "." not in t:
-        # asume coma como decimal
         t = t.replace(",", ".")
     return float(t)
 
@@ -69,7 +79,7 @@ def money(n):
     except Exception:
         return n
 
-# ========= Migración / Esquema (modelo final + fechas + caja) =========
+# ========= Migración / Esquema (robusta) =========
 MIGRATION_SQL = r"""
 -- === BASE: asegura tablas ===
 CREATE TABLE IF NOT EXISTS clientes (
@@ -86,11 +96,11 @@ CREATE TABLE IF NOT EXISTS pagos (
   nota TEXT
 );
 
--- === 1) QUITA TRIGGERS antes de alterar tipos/columnas ===
+-- 1) QUITA TRIGGERS antes de alterar columnas
 DROP TRIGGER IF EXISTS trg_clientes_aiu ON clientes;
 DROP TRIGGER IF EXISTS trg_pagos_aiud   ON pagos;
 
--- === 2) Renombres por esquemas viejos ===
+-- 2) Renombres por esquemas viejos
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.columns
@@ -103,7 +113,7 @@ BEGIN
   END IF;
 END$$;
 
--- === 3) Añade columnas del modelo actual ===
+-- 3) Añade columnas del modelo actual
 ALTER TABLE clientes
   ADD COLUMN IF NOT EXISTS monto_prestado NUMERIC(12,2) NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS deuda_actual  NUMERIC(12,2) NOT NULL DEFAULT 0,
@@ -111,7 +121,7 @@ ALTER TABLE clientes
   ADD COLUMN IF NOT EXISTS fecha_prestamo DATE NOT NULL DEFAULT CURRENT_DATE,
   ADD COLUMN IF NOT EXISTS fecha_ultimo_pago DATE;
 
--- === 4) Tipos/constraints correctos (ya sin triggers molestando) ===
+-- 4) Tipos/constraints correctos (ya sin triggers molestando)
 ALTER TABLE clientes
   ALTER COLUMN monto_prestado TYPE NUMERIC(12,2) USING monto_prestado::numeric,
   ALTER COLUMN deuda_actual   TYPE NUMERIC(12,2) USING deuda_actual::numeric,
@@ -120,19 +130,19 @@ ALTER TABLE clientes
   ALTER COLUMN monto_prestado SET DEFAULT 0,
   ALTER COLUMN deuda_actual   SET DEFAULT 0;
 
--- === 5) Limpia columnas que ya no quieres ===
+-- 5) Limpia columnas que ya no quieres
 ALTER TABLE clientes
   DROP COLUMN IF EXISTS telefono,
   DROP COLUMN IF EXISTS documento,
   DROP COLUMN IF EXISTS fecha_registro;
 
--- === 6) Caja diaria ===
+-- 6) Caja diaria (sin PK para ser compatible con tablas existentes)
 CREATE TABLE IF NOT EXISTS efectivo_diario (
-  fecha DATE PRIMARY KEY,
+  fecha DATE,
   monto NUMERIC(14,2) NOT NULL DEFAULT 0
 );
 
--- === 7) Funciones de recálculo y fechas ===
+-- 7) Funciones y triggers de recálculo
 CREATE OR REPLACE FUNCTION recalc_deuda_fn(p_cid int)
 RETURNS void AS $$
 BEGIN
@@ -156,7 +166,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- === 8) Triggers (recrear) ===
 CREATE OR REPLACE FUNCTION trg_clientes_recalc()
 RETURNS trigger AS $$
 BEGIN
@@ -200,7 +209,7 @@ CREATE TRIGGER trg_pagos_aiud
 AFTER INSERT OR UPDATE OR DELETE ON pagos
 FOR EACH ROW EXECUTE FUNCTION trg_pagos_recalc();
 
--- === 9) Backfill: alinear deudas y fechas existentes ===
+-- 8) Backfill de fechas y deudas existentes
 UPDATE clientes c
 SET fecha_ultimo_pago = sub.max_pago
 FROM (
@@ -245,7 +254,8 @@ def inject_totales():
         with get_connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT COALESCE(SUM(deuda_actual),0) FROM clientes;")
             deuda_total = float(cur.fetchone()[0] or 0)
-            cur.execute("SELECT COALESCE(monto,0) FROM efectivo_diario WHERE fecha = CURRENT_DATE;")
+            # SUM por si existieran filas duplicadas
+            cur.execute("SELECT COALESCE(SUM(monto),0) FROM efectivo_diario WHERE fecha = CURRENT_DATE;")
             row = cur.fetchone()
             efectivo_hoy = float((row[0] if row else 0) or 0)
     except Exception:
@@ -507,7 +517,7 @@ def pago_editar(pago_id):
 
             if not pago:
                 flash("Pago no encontrado.", "warning")
-                return redirect(url_for("pagos_listado"))
+                return redirect(url_for('pagos_listado'))
 
             return render_template("editar_pago.html", pago=pago, clientes=clientes)
 
@@ -545,14 +555,11 @@ def pago_eliminar(pago_id):
         conn.close()
 
 # -------- Efectivo (caja diaria) --------
-# --- pega esto reemplazando toda tu función efectivo() ---
-from decimal import Decimal, InvalidOperation
-
 def _parse_amount_relajado(txt: str):
     """
-    123,45  -> 123.45
-    1.234,56 -> 1234.56
-    1,234.56 -> 1234.56
+    123,45 -> '123.45'
+    1.234,56 -> '1234.56'
+    1,234.56 -> '1234.56'
     "" -> None
     """
     if txt is None:
@@ -560,15 +567,12 @@ def _parse_amount_relajado(txt: str):
     t = txt.strip()
     if not t:
         return None
-    # quita separadores comunes y símbolos
     for ch in ["$", "€", "₡", "₲", "₵", "£", "¥", "₿", " "]:
         t = t.replace(ch, "")
     if "," in t and "." in t:
         if t.rfind(",") > t.rfind("."):
-            # coma decimal
             t = t.replace(".", "").replace(",", ".")
         else:
-            # punto decimal
             t = t.replace(",", "")
     elif "," in t and "." not in t:
         t = t.replace(",", ".")
@@ -581,15 +585,13 @@ def efectivo():
             monto_txt = (request.form.get("monto") or "").strip()
             fecha_str = (request.form.get("fecha") or "").strip()
 
-            # 1) Parseo robusto del monto
+            # 1) Parseo robusto del monto (acepta vacío = 0.00)
             if monto_txt == "":
                 monto = Decimal("0.00")
             else:
                 try:
-                    # primero intenta estilo "normal" 123 o 123.45
-                    monto = Decimal(monto_txt)
+                    monto = Decimal(monto_txt)  # "123" o "123.45"
                 except InvalidOperation:
-                    # intenta el parser relajado (coma, miles, etc.)
                     normalizado = _parse_amount_relajado(monto_txt)
                     if not normalizado:
                         monto = Decimal("0.00")
@@ -600,10 +602,9 @@ def efectivo():
                 flash("El monto de efectivo no puede ser negativo.", "warning")
                 return redirect(url_for("efectivo"))
 
-            # Redondea a 2 decimales
             monto = monto.quantize(Decimal("0.01"))
 
-            # 2) Fecha: si viene vacía, usa hoy
+            # 2) Fecha: si viene vacía, usa HOY
             try:
                 f = date.fromisoformat(fecha_str) if fecha_str else date.today()
             except Exception:
@@ -611,30 +612,37 @@ def efectivo():
                 return redirect(url_for("efectivo"))
 
             # 3) DB: asegura tabla y guarda (sin ON CONFLICT)
-with get_connection() as conn, conn.cursor() as cur:
-    # Si la tabla ya existe sin PK, esto no la rompe ni la altera.
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS efectivo_diario (
-          fecha DATE,
-          monto NUMERIC(14,2) NOT NULL DEFAULT 0
-        );
-    """)
-    # Intentamos actualizar primero
-    cur.execute("UPDATE efectivo_diario SET monto = %s WHERE fecha = %s;", (monto, f))
-    if cur.rowcount == 0:
-        # Si no había fila para esa fecha, insertamos
-        cur.execute("INSERT INTO efectivo_diario (fecha, monto) VALUES (%s, %s);", (f, monto))
+            with get_connection() as conn, conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS efectivo_diario (
+                      fecha DATE,
+                      monto NUMERIC(14,2) NOT NULL DEFAULT 0
+                    );
+                """)
+                # Intentamos actualizar primero por fecha
+                cur.execute("UPDATE efectivo_diario SET monto = %s WHERE fecha = %s;", (monto, f))
+                if cur.rowcount == 0:
+                    cur.execute("INSERT INTO efectivo_diario (fecha, monto) VALUES (%s, %s);", (f, monto))
+            flash("Efectivo guardado.", "success")
+            return redirect(url_for("efectivo"))
 
-flash("Efectivo guardado.", "success")
-return redirect(url_for("efectivo"))
+        except Exception as e:
+            # Cualquier error: mensaje amigable y log
+            print("ERROR /efectivo POST:", repr(e))
+            flash(f"Error al guardar efectivo: {e}", "warning")
+            return redirect(url_for("efectivo"))
 
-    # GET (sin cambios mayores)
+    # GET
     with get_connection() as conn, conn.cursor() as cur:
-        cur.execute("SELECT COALESCE(monto,0) FROM efectivo_diario WHERE fecha=CURRENT_DATE;")
+        # SUM por si existieran duplicados de la misma fecha
+        cur.execute("SELECT COALESCE(SUM(monto),0) FROM efectivo_diario WHERE fecha=CURRENT_DATE;")
         row = cur.fetchone()
         efectivo_hoy = float((row[0] if row else 0) or 0)
+
         cur.execute("""
-            SELECT fecha, monto FROM efectivo_diario
+            SELECT fecha, SUM(monto) AS monto
+            FROM efectivo_diario
+            GROUP BY fecha
             ORDER BY fecha DESC
             LIMIT 14;
         """)
