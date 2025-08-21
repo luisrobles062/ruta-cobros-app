@@ -14,14 +14,13 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "secreto")
 
 # ========= Conexión a Neon =========
-# Usa DATABASE_URL si existe; si no, usa el DSN correcto (SIN channel_binding y SIN comillas)
 RAW_DATABASE_URL = os.getenv(
     "DATABASE_URL",
+    # DSN válido SIN channel_binding y SIN comillas
     "postgresql://neondb_owner:npg_DqyQpk4iBLh3@ep-still-water-adszkvnv-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require"
 ).strip()
 
 def _sanitize_url(url: str) -> str:
-    # quita comillas/espacios y elimina channel_binding si lo pegaron por error
     url = (url or "").strip().strip('\'"').strip()
     if not url:
         return url
@@ -29,7 +28,6 @@ def _sanitize_url(url: str) -> str:
         u = urlparse(url)
         params = dict(parse_qsl(u.query))
         params.pop("channel_binding", None)
-        # reconstruir query sin channel_binding
         q = "&".join(f"{k}={v}" for k, v in params.items()) if params else ""
         url = u._replace(query=q).geturl()
     return url
@@ -41,8 +39,6 @@ def get_connection():
         raise RuntimeError("DATABASE_URL no configurada.")
     u = urlparse(DATABASE_URL)
     params = dict(parse_qsl(u.query))
-
-    # Construimos DSN para psycopg2 (robusto en ambientes donde la URL falla)
     dsn_parts = [
         f"dbname={u.path.lstrip('/')}",
         f"user={u.username}",
@@ -54,35 +50,55 @@ def get_connection():
     dsn = " ".join(dsn_parts)
     return psycopg2.connect(dsn)
 
-# ========= Esquema =========
-DDL = """
-CREATE TABLE IF NOT EXISTS clientes (
-    id SERIAL PRIMARY KEY,
-    nombre TEXT NOT NULL,
-    telefono TEXT,
-    documento TEXT,
-    fecha_registro DATE DEFAULT CURRENT_DATE
-);
-
-CREATE TABLE IF NOT EXISTS pagos (
-    id SERIAL PRIMARY KEY,
-    cliente_id INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
-    monto NUMERIC(14,2) NOT NULL,
-    fecha_pago DATE NOT NULL DEFAULT CURRENT_DATE,
-    metodo TEXT,
-    nota TEXT
-);
-"""
-
+# ========= Migración / Esquema =========
 def init_schema():
+    """
+    - Crea tablas si no existen.
+    - Migra 'clientes' añadiendo columnas faltantes (telefono, documento, fecha_registro)
+      para compatibilidad con bases viejas que solo tenían nombre/montos/observaciones.
+    """
     conn = get_connection()
     try:
         with conn, conn.cursor() as cur:
-            cur.execute(DDL)
+            # Asegurar tabla clientes (mínima para poder ALTER)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS clientes (
+                    id SERIAL PRIMARY KEY,
+                    nombre TEXT NOT NULL
+                );
+            """)
+
+            # Ver columnas existentes
+            cur.execute("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema='public' AND table_name='clientes';
+            """)
+            existentes = {r[0] for r in cur.fetchall()}
+
+            # Añadir columnas nuevas si faltan (idempotente)
+            if 'telefono' not in existentes:
+                cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS telefono TEXT;")
+            if 'documento' not in existentes:
+                cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS documento TEXT;")
+            if 'fecha_registro' not in existentes:
+                cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS fecha_registro DATE DEFAULT CURRENT_DATE;")
+
+            # Asegurar tabla pagos (completa)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS pagos (
+                    id SERIAL PRIMARY KEY,
+                    cliente_id INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+                    monto NUMERIC(14,2) NOT NULL,
+                    fecha_pago DATE NOT NULL DEFAULT CURRENT_DATE,
+                    metodo TEXT,
+                    nota TEXT
+                );
+            """)
     finally:
         conn.close()
 
-# Crea el esquema al importar (funciona con gunicorn y múltiples workers)
+# Ejecuta migración al importar (sirve con gunicorn)
 try:
     init_schema()
 except Exception as e:
@@ -119,7 +135,7 @@ def dbcheck():
 
 # ========= Rutas =========
 
-# Home: Dashboard simple con listado de clientes + conteos
+# Home: Dashboard con listado de clientes + conteos
 @app.route("/")
 def home():
     conn = get_connection()
@@ -138,7 +154,6 @@ def home():
             cur.execute("SELECT COALESCE(SUM(monto),0) FROM pagos;")
             total_recaudado = cur.fetchone()[0]
 
-        # Renderiza tu dashboard (ajusta al template que uses)
         return render_template(
             "inicio.html",
             clientes=clientes,
@@ -148,12 +163,11 @@ def home():
     finally:
         conn.close()
 
-# -------- Login (opcional, sin bloqueo de rutas) --------
+# -------- Login (opcional; hoy no bloquea rutas) --------
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
         return render_template("login.html")
-    # Aquí podrías validar credenciales si más adelante agregas una tabla usuarios
     flash("Inicio de sesión simulado.", "info")
     return redirect(url_for("home"))
 
@@ -162,7 +176,6 @@ def login():
 def cliente_nuevo():
     if request.method == "GET":
         return render_template("nuevo.html")
-    # POST → crear cliente
     nombre = request.form.get("nombre", "").strip()
     telefono = request.form.get("telefono", "").strip()
     documento = request.form.get("documento", "").strip()
@@ -199,7 +212,6 @@ def cliente_editar(cliente_id):
                     return redirect(url_for("home"))
             return render_template("editar_cliente.html", cliente=cliente)
 
-        # POST → actualizar
         nombre = request.form.get("nombre", "").strip()
         telefono = request.form.get("telefono", "").strip()
         documento = request.form.get("documento", "").strip()
@@ -269,7 +281,7 @@ def pago_nuevo():
 
     if not cliente_id or not monto:
         flash("Cliente y monto son obligatorios.", "warning")
-        return redirect(url_for("pagos_listado"))
+        return redirect(url_for('pagos_listado'))
 
     conn = get_connection()
     try:
@@ -306,7 +318,6 @@ def pago_editar(pago_id):
 
             return render_template("editar_pago.html", pago=pago, clientes=clientes)
 
-        # POST → actualizar
         cliente_id = request.form.get("cliente_id")
         monto = request.form.get("monto")
         metodo = request.form.get("metodo", "").strip()
