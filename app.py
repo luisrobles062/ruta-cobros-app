@@ -548,16 +548,29 @@ def pago_eliminar(pago_id):
 @app.route("/efectivo", methods=["GET", "POST"])
 def efectivo():
     if request.method == "POST":
-        monto = (request.form.get("monto") or "").strip()
+        monto_txt = (request.form.get("monto") or "").strip()
         fecha_str = (request.form.get("fecha") or "").strip()
-        try:
-            monto_norm = parse_amount(monto)
-            if monto_norm < 0:
-                raise ValueError
-        except Exception:
-            flash("Monto de efectivo inválido.", "warning")
+
+        # Permite: vacío = 0.00; números normales tipo 123 o 123.45
+        if monto_txt == "":
+            monto_norm = 0.0
+        else:
+            try:
+                # Caso normal: "123" o "123.45"
+                monto_norm = float(monto_txt)
+            except Exception:
+                # Si el navegador mete formato raro, intentamos el parser tolerante
+                try:
+                    monto_norm = parse_amount(monto_txt)
+                except Exception:
+                    flash("Monto de efectivo inválido.", "warning")
+                    return redirect(url_for("efectivo"))
+
+        if monto_norm < 0:
+            flash("El monto no puede ser negativo.", "warning")
             return redirect(url_for("efectivo"))
 
+        # Fecha: si la dejas vacía, se usa HOY
         try:
             f = date.fromisoformat(fecha_str) if fecha_str else date.today()
         except Exception:
@@ -584,7 +597,6 @@ def efectivo():
             cur.execute("SELECT COALESCE(monto,0) FROM efectivo_diario WHERE fecha=CURRENT_DATE;")
             row = cur.fetchone()
             efectivo_hoy = float((row[0] if row else 0) or 0)
-
             cur.execute("""
                 SELECT fecha, monto FROM efectivo_diario
                 ORDER BY fecha DESC
