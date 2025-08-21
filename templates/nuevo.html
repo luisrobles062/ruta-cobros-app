@@ -1,96 +1,27 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Nuevo Cliente</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            background-color: #f0f2f5;
-        }
-        .logo {
-            text-align: center;
-            font-size: 24px;
-            font-weight: bold;
-            margin-bottom: 30px;
-        }
-        h1 {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        form {
-            max-width: 700px;
-            margin: auto;
-            background-color: white;
-            padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        }
-        label {
-            display: block;
-            margin-top: 15px;
-            font-weight: bold;
-        }
-        input, textarea {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            border-radius: 5px;
-            border: 1px solid #ccc;
-            font-size: 16px;
-        }
-        button {
-            margin-top: 25px;
-            padding: 12px 20px;
-            font-size: 16px;
-            background-color: #3498db;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #2c80b4;
-        }
-        .volver {
-            display: block;
-            text-align: center;
-            margin-top: 20px;
-            text-decoration: none;
-            color: #27ae60;
-        }
-    </style>
-</head>
-<body>
-
-    <div class="logo">RUTA DE COBRO LUIS ROBLES</div>
-
-    <h1>Registrar Nuevo Cliente</h1>
-
-    <form method="POST">
-        <label for="fecha">Fecha Prestada</label>
-        <input type="date" name="fecha" id="fecha" required>
-
-        <label for="nombre">Nombre</label>
-        <input type="text" name="nombre" id="nombre" required>
-
-        <label for="monto">Monto Prestado</label>
-        <input type="number" step="0.01" name="monto" id="monto" required>
-
-        <label for="porcentaje">Porcentaje Rédito (%)</label>
-        <input type="number" step="0.01" name="porcentaje" id="porcentaje" required>
-
-        <label for="deuda">Deuda Actual</label>
-        <input type="number" step="0.01" name="deuda" id="deuda" required>
-
-        <label for="observacion">Observaciones</label>
-        <textarea name="observacion" id="observacion" rows="3"></textarea>
-
-        <button type="submit">Guardar Cliente</button>
+{% extends "base.html" %}
+{% block title %}Nuevo cliente - Ruta de Cobros{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Nuevo cliente</h1>
+<div class="card border-0 shadow-sm">
+  <div class="card-body">
+    <form method="POST" action="{{ url_for('cliente_nuevo') }}">
+      <div class="mb-3">
+        <label class="form-label">Nombre *</label>
+        <input name="nombre" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Teléfono</label>
+        <input name="telefono" class="form-control">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Documento</label>
+        <input name="documento" class="form-control">
+      </div>
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="{{ url_for('home') }}">Cancelar</a>
+        <button class="btn btn-primary">Guardar</button>
+      </div>
     </form>
-
-    <a class="volver" href="{{ url_for('inicio') }}">← Volver a la lista</a>
-
-</body>
-</html>
+  </div>
+</div>
+{% endblock %}
