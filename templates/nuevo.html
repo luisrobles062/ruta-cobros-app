@@ -15,8 +15,7 @@
       </div>
       <div class="mb-3">
         <label class="form-label">Fecha del préstamo</label>
-        <input name="fecha_prestamo" class="form-control" type="date" value="{{ (cycler).__class__.__mro__[1].__init__.__globals__['__builtins__'].get('str', lambda x:x)(namespace=None) and '' }}" placeholder="AAAA-MM-DD">
-        {# truco para no forzar hoy; si quieres hoy por defecto: value="{{ (now().date()) }}" con ext. de jinja #}
+        <input name="fecha_prestamo" class="form-control" type="date" placeholder="AAAA-MM-DD">
       </div>
       <div class="mb-3">
         <label class="form-label">Observaciones</label>
