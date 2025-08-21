@@ -48,51 +48,72 @@ def get_connection():
     dsn = " ".join(dsn_parts)
     return psycopg2.connect(dsn)
 
-# ========= Migración / Esquema + TRIGGERS =========
-MIGRATION_SQL = """
--- 1) Crear tablas si no existen (mínimas)
+# ========= Migración / Esquema (normaliza a: id, nombre, monto_prestado, deuda_actual, observaciones) =========
+MIGRATION_SQL = r"""
+-- 0) Crear tablas base si no existen
 CREATE TABLE IF NOT EXISTS clientes (
-    id SERIAL PRIMARY KEY,
-    nombre TEXT NOT NULL
+  id SERIAL PRIMARY KEY,
+  nombre TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS pagos (
-    id SERIAL PRIMARY KEY,
-    cliente_id INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
-    monto NUMERIC(14,2) NOT NULL,
-    fecha_pago DATE NOT NULL DEFAULT CURRENT_DATE,
-    metodo TEXT,
-    nota TEXT
+  id SERIAL PRIMARY KEY,
+  cliente_id INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+  monto NUMERIC(14,2) NOT NULL,
+  fecha_pago DATE NOT NULL DEFAULT CURRENT_DATE,
+  metodo TEXT,
+  nota TEXT
 );
+
+-- 1) Renombres condicionales por si existen esquemas viejos
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='clientes' AND column_name='monto') THEN
+    EXECUTE 'ALTER TABLE clientes RENAME COLUMN monto TO monto_prestado';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='clientes' AND column_name='deuda') THEN
+    EXECUTE 'ALTER TABLE clientes RENAME COLUMN deuda TO deuda_actual';
+  END IF;
+END$$;
 
 -- 2) Asegurar columnas del modelo final
 ALTER TABLE clientes
-    ADD COLUMN IF NOT EXISTS monto_prestado NUMERIC(12,2) NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS deuda_actual  NUMERIC(12,2) NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS observaciones TEXT;
+  ADD COLUMN IF NOT EXISTS monto_prestado NUMERIC(12,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS deuda_actual  NUMERIC(12,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS observaciones TEXT;
 
--- 3) Quitar columnas que ya no quieres
+-- 3) Tipos y constraints correctos (idempotente)
 ALTER TABLE clientes
-    DROP COLUMN IF EXISTS telefono,
-    DROP COLUMN IF EXISTS documento;
+  ALTER COLUMN monto_prestado TYPE NUMERIC(12,2) USING monto_prestado::numeric,
+  ALTER COLUMN deuda_actual  TYPE NUMERIC(12,2) USING deuda_actual::numeric,
+  ALTER COLUMN monto_prestado SET NOT NULL,
+  ALTER COLUMN deuda_actual  SET NOT NULL,
+  ALTER COLUMN monto_prestado SET DEFAULT 0,
+  ALTER COLUMN deuda_actual  SET DEFAULT 0;
 
--- (Si existiera fecha_registro y no la quieres, descomenta:)
--- ALTER TABLE clientes DROP COLUMN IF EXISTS fecha_registro;
+-- 4) Quitar columnas que ya no se usan
+ALTER TABLE clientes
+  DROP COLUMN IF EXISTS telefono,
+  DROP COLUMN IF EXISTS documento,
+  DROP COLUMN IF EXISTS fecha_registro;
 
--- 4) Función genérica para recalcular deuda_actual
+-- 5) Función para recalcular deuda_actual según pagos
 CREATE OR REPLACE FUNCTION recalc_deuda_fn(p_cid int)
 RETURNS void AS $$
 BEGIN
   UPDATE clientes c
   SET deuda_actual = GREATEST(
       0,
-      c.monto_prestado - COALESCE( (SELECT SUM(monto) FROM pagos WHERE cliente_id = p_cid), 0)
+      c.monto_prestado - COALESCE((SELECT SUM(monto) FROM pagos WHERE cliente_id = p_cid), 0)
   )
   WHERE c.id = p_cid;
 END;
 $$ LANGUAGE plpgsql;
 
--- 5) Trigger en CLIENTES: al insertar o cambiar monto_prestado, recalcular
+-- 6) Trigger en CLIENTES (insert/update de monto_prestado)
 CREATE OR REPLACE FUNCTION trg_clientes_recalc()
 RETURNS trigger AS $$
 BEGIN
@@ -106,7 +127,7 @@ CREATE TRIGGER trg_clientes_aiu
 AFTER INSERT OR UPDATE OF monto_prestado ON clientes
 FOR EACH ROW EXECUTE FUNCTION trg_clientes_recalc();
 
--- 6) Trigger en PAGOS: al insertar/editar/eliminar, recalcular la(s) deuda(s)
+-- 7) Trigger en PAGOS (insert/update/delete)
 CREATE OR REPLACE FUNCTION trg_pagos_recalc()
 RETURNS trigger AS $$
 BEGIN
@@ -134,13 +155,11 @@ CREATE TRIGGER trg_pagos_aiud
 AFTER INSERT OR UPDATE OR DELETE ON pagos
 FOR EACH ROW EXECUTE FUNCTION trg_pagos_recalc();
 
--- 7) Backfill: alinear deuda_actual de todos los clientes con pagos existentes
---    Primero, pones deuda_actual = monto_prestado si no hay pagos:
+-- 8) Backfill: alinear deuda_actual de todos con lo existente
 UPDATE clientes c
 SET deuda_actual = c.monto_prestado
 WHERE NOT EXISTS (SELECT 1 FROM pagos p WHERE p.cliente_id = c.id);
 
---    Luego, para los que sí tienen pagos, restar suma de pagos:
 UPDATE clientes c
 SET deuda_actual = GREATEST(0, c.monto_prestado - p.total)
 FROM (
@@ -222,7 +241,7 @@ def home():
     finally:
         conn.close()
 
-# -------- Login (opcional) --------
+# Login (opcional)
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
@@ -234,7 +253,7 @@ def login():
 @app.route("/clientes/nuevo", methods=["GET", "POST"])
 def cliente_nuevo():
     if request.method == "GET":
-        return render_template("nuevo.html")  # formulario: nombre, monto_prestado, observaciones
+        return render_template("nuevo.html")  # nombre, monto_prestado, observaciones
 
     nombre = (request.form.get("nombre") or "").strip()
     monto_raw = (request.form.get("monto_prestado") or "").strip()
@@ -245,7 +264,9 @@ def cliente_nuevo():
         return redirect(url_for("cliente_nuevo"))
 
     try:
-        monto = float(monto_raw)
+        # Acepta coma decimal: "1.234,56" → 1234.56
+        monto_raw_norm = monto_raw.replace(".", "").replace(",", ".")
+        monto = float(monto_raw_norm)
         if monto < 0:
             raise ValueError
     except ValueError:
@@ -257,11 +278,8 @@ def cliente_nuevo():
         with conn, conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO clientes (nombre, monto_prestado, deuda_actual, observaciones)
-                VALUES (%s, %s, %s, %s)
-                RETURNING id;
+                VALUES (%s, %s, %s, %s);
             """, (nombre, monto, monto, observaciones))
-            _ = cur.fetchone()[0]
-            # Trigger de clientes recalcularía igual, pero dejamos deuda_actual = monto al inicio
         flash("Cliente creado correctamente.", "success")
         return redirect(url_for("home"))
     finally:
@@ -292,7 +310,8 @@ def cliente_editar(cliente_id):
             return redirect(url_for("cliente_editar", cliente_id=cliente_id))
 
         try:
-            monto = float(monto_raw)
+            monto_raw_norm = monto_raw.replace(".", "").replace(",", ".")
+            monto = float(monto_raw_norm)
             if monto < 0:
                 raise ValueError
         except ValueError:
@@ -305,7 +324,6 @@ def cliente_editar(cliente_id):
                 SET nombre=%s, monto_prestado=%s, observaciones=%s
                 WHERE id=%s;
             """, (nombre, monto, observaciones, cliente_id))
-            # Trigger actualizará deuda_actual en base a pagos
         flash("Cliente actualizado.", "success")
         return redirect(url_for("home"))
     finally:
@@ -363,13 +381,19 @@ def pago_nuevo():
         flash("Cliente y monto son obligatorios.", "warning")
         return redirect(url_for("pagos_listado"))
 
+    try:
+        monto_norm = float((monto or "0").replace(".", "").replace(",", "."))
+    except ValueError:
+        flash("Monto inválido.", "warning")
+        return redirect(url_for("pagos_listado"))
+
     conn = get_connection()
     try:
         with conn, conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO pagos (cliente_id, monto, fecha_pago, metodo, nota)
                 VALUES (%s, %s, %s, %s, %s);
-            """, (int(cliente_id), float(monto), date.today(), metodo, nota))
+            """, (int(cliente_id), monto_norm, date.today(), metodo, nota))
         flash("Pago registrado.", "success")
         return redirect(url_for("pagos_listado"))
     finally:
@@ -403,8 +427,10 @@ def pago_editar(pago_id):
         metodo = (request.form.get("metodo") or "").strip()
         nota = (request.form.get("nota") or "").strip()
 
-        if not cliente_id or not monto:
-            flash("Cliente y monto son obligatorios.", "warning")
+        try:
+            monto_norm = float((monto or "0").replace(".", "").replace(",", "."))
+        except ValueError:
+            flash("Monto inválido.", "warning")
             return redirect(url_for("pago_editar", pago_id=pago_id))
 
         with conn, conn.cursor() as cur:
@@ -412,7 +438,7 @@ def pago_editar(pago_id):
                 UPDATE pagos
                 SET cliente_id=%s, monto=%s, metodo=%s, nota=%s
                 WHERE id=%s;
-            """, (int(cliente_id), float(monto), metodo, nota, pago_id))
+            """, (int(cliente_id), monto_norm, metodo, nota, pago_id))
         flash("Pago actualizado.", "success")
         return redirect(url_for("pagos_listado"))
     finally:
