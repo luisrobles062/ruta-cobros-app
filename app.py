@@ -610,27 +610,23 @@ def efectivo():
                 flash("Fecha inválida (usa AAAA-MM-DD).", "warning")
                 return redirect(url_for("efectivo"))
 
-            # 3) DB: asegura tabla y guarda
-            with get_connection() as conn, conn.cursor() as cur:
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS efectivo_diario (
-                      fecha DATE PRIMARY KEY,
-                      monto NUMERIC(14,2) NOT NULL DEFAULT 0
-                    );
-                """)
-                cur.execute("""
-                    INSERT INTO efectivo_diario (fecha, monto)
-                    VALUES (%s, %s)
-                    ON CONFLICT (fecha) DO UPDATE SET monto = EXCLUDED.monto;
-                """, (f, monto))
-            flash("Efectivo guardado.", "success")
-            return redirect(url_for("efectivo"))
+            # 3) DB: asegura tabla y guarda (sin ON CONFLICT)
+with get_connection() as conn, conn.cursor() as cur:
+    # Si la tabla ya existe sin PK, esto no la rompe ni la altera.
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS efectivo_diario (
+          fecha DATE,
+          monto NUMERIC(14,2) NOT NULL DEFAULT 0
+        );
+    """)
+    # Intentamos actualizar primero
+    cur.execute("UPDATE efectivo_diario SET monto = %s WHERE fecha = %s;", (monto, f))
+    if cur.rowcount == 0:
+        # Si no había fila para esa fecha, insertamos
+        cur.execute("INSERT INTO efectivo_diario (fecha, monto) VALUES (%s, %s);", (f, monto))
 
-        except Exception as e:
-            # Cualquier error: mensaje amigable en UI (y log en Render)
-            print("ERROR /efectivo POST:", repr(e))
-            flash(f"Error al guardar efectivo: {e}", "warning")
-            return redirect(url_for("efectivo"))
+flash("Efectivo guardado.", "success")
+return redirect(url_for("efectivo"))
 
     # GET (sin cambios mayores)
     with get_connection() as conn, conn.cursor() as cur:
