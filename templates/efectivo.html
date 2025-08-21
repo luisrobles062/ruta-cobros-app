@@ -7,7 +7,6 @@
 </div>
 
 <div class="row g-3">
-  <!-- Formulario para registrar/actualizar efectivo -->
   <div class="col-lg-5">
     <div class="card border-0 shadow-sm">
       <div class="card-body">
@@ -18,25 +17,17 @@
             <input class="form-control" type="date" name="fecha">
             <div class="form-text">Si la dejas vacía, se usará la fecha de hoy.</div>
           </div>
-
           <div class="mb-3">
             <label class="form-label">Monto *</label>
-            <input class="form-control"
-                   type="number"
-                   step="0.01"
-                   min="0"
-                   name="monto"
-                   placeholder="Ej: 2500.00">
+            <input class="form-control" type="number" step="0.01" min="0" name="monto" placeholder="Ej: 2500.00">
             <div class="form-text">Solo números (usa punto para decimales). Vacío = 0.00</div>
           </div>
-
           <button class="btn btn-primary" type="submit">Guardar efectivo</button>
         </form>
       </div>
     </div>
   </div>
 
-  <!-- Vista de efectivo de hoy + histórico -->
   <div class="col-lg-7">
     <div class="card border-0 shadow-sm h-100">
       <div class="card-body">
@@ -48,9 +39,7 @@
         <div class="text-muted mb-2">Últimos 14 días</div>
         <div class="table-responsive">
           <table class="table table-sm align-middle">
-            <thead class="table-light">
-              <tr><th>Fecha</th><th>Monto</th></tr>
-            </thead>
+            <thead class="table-light"><tr><th>Fecha</th><th>Monto</th></tr></thead>
             <tbody>
               {% for f, m in historico %}
                 <tr><td>{{ f }}</td><td>{{ money(m) }}</td></tr>
