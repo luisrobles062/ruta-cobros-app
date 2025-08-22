@@ -433,29 +433,80 @@ def cliente_eliminar(cliente_id):
 # -------- Pagos --------
 @app.route("/pagos", methods=["GET"])
 def pagos_listado():
+    # --- NUEVO: filtro opcional por cliente ---
+    cliente_id_filtro = request.args.get("cliente_id", type=int)
+
     conn = get_connection()
     try:
         with conn, conn.cursor() as cur:
-            cur.execute("""
-                SELECT p.id, p.monto, p.fecha_pago, p.metodo, p.nota,
-                       c.id AS cliente_id, c.nombre
-                FROM pagos p
-                JOIN clientes c ON c.id = p.cliente_id
-                ORDER BY p.fecha_pago DESC, p.id DESC;
-            """)
-            pagos = cur.fetchall()
-
+            # Siempre cargo el listado de clientes para el <select>
             cur.execute("SELECT id, nombre FROM clientes ORDER BY nombre;")
             clientes = cur.fetchall()
 
+            # Pagos (todos o filtrados por cliente)
+            if cliente_id_filtro:
+                cur.execute("""
+                    SELECT p.id, p.monto, p.fecha_pago, p.metodo, p.nota,
+                           c.id AS cliente_id, c.nombre
+                    FROM pagos p
+                    JOIN clientes c ON c.id = p.cliente_id
+                    WHERE p.cliente_id = %s
+                    ORDER BY p.fecha_pago DESC, p.id DESC;
+                """, (cliente_id_filtro,))
+                pagos = cur.fetchall()
+
+                # --- NUEVO: resumen del cliente seleccionado ---
+                cur.execute("""
+                    SELECT id, nombre, monto_prestado, deuda_actual,
+                           fecha_prestamo, fecha_ultimo_pago
+                    FROM clientes
+                    WHERE id = %s;
+                """, (cliente_id_filtro,))
+                cli = cur.fetchone()
+                if not cli:
+                    flash("Cliente no encontrado.", "warning")
+                    return redirect(url_for("pagos_listado"))
+
+                cur.execute("SELECT COALESCE(SUM(monto),0) FROM pagos WHERE cliente_id = %s;", (cliente_id_filtro,))
+                total_pagado_cli = float(cur.fetchone()[0] or 0)
+
+                resumen = dict(
+                    id=cli[0],
+                    nombre=cli[1],
+                    monto_prestado=float(cli[2] or 0),
+                    deuda_actual=float(cli[3] or 0),
+                    fecha_prestamo=cli[4],
+                    fecha_ultimo_pago=cli[5],
+                    total_pagado=total_pagado_cli
+                )
+            else:
+                # Sin filtro: comportamiento original
+                cur.execute("""
+                    SELECT p.id, p.monto, p.fecha_pago, p.metodo, p.nota,
+                           c.id AS cliente_id, c.nombre
+                    FROM pagos p
+                    JOIN clientes c ON c.id = p.cliente_id
+                    ORDER BY p.fecha_pago DESC, p.id DESC;
+                """)
+                pagos = cur.fetchall()
+                resumen = None  # no hay tarjeta resumen
+
+            # Total recaudado (histórico, como ya tenías)
             cur.execute("SELECT COALESCE(SUM(monto),0) FROM pagos;")
             total_recaudado = cur.fetchone()[0]
+
+            # --- NUEVO: total de pagos del día (hoy) ---
+            cur.execute("SELECT COALESCE(SUM(monto),0) FROM pagos WHERE fecha_pago = CURRENT_DATE;")
+            total_hoy_pagos = cur.fetchone()[0]
 
         return render_template(
             "pagos.html",
             pagos=pagos,
             clientes=clientes,
             total_recaudado=money(total_recaudado),
+            total_hoy_pagos=money(total_hoy_pagos),  # NUEVO
+            resumen=resumen,                          # NUEVO
+            cliente_id_filtro=cliente_id_filtro       # NUEVO (para marcar <select>)
         )
     finally:
         conn.close()
@@ -551,6 +602,27 @@ def pago_eliminar(pago_id):
             cur.execute("DELETE FROM pagos WHERE id=%s;", (pago_id,))
         flash("Pago eliminado.", "success")
         return redirect(url_for("pagos_listado"))
+    finally:
+        conn.close()
+
+# -------- Recaudo diario (vista nueva) --------
+@app.get("/pagos/diario")
+def pagos_diario():
+    conn = get_connection()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute("""
+                SELECT fecha_pago::date AS fecha,
+                       COUNT(*) AS n_pagos,
+                       COALESCE(SUM(monto),0) AS total
+                FROM pagos
+                GROUP BY fecha
+                ORDER BY fecha DESC
+                LIMIT 60;
+            """)
+            filas = cur.fetchall()
+        # filas: [(fecha, n_pagos, total), ...]
+        return render_template("pagos_diario.html", filas=filas, money=money)
     finally:
         conn.close()
 
