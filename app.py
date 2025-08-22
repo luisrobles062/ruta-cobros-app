@@ -1,17 +1,48 @@
 # app.py
 # -*- coding: utf-8 -*-
 import os
+import hmac
 from datetime import date
 from urllib.parse import urlparse, parse_qsl
 from decimal import Decimal, InvalidOperation
+from functools import wraps
 
 from flask import (
-    Flask, render_template, request, redirect, url_for, flash, jsonify
+    Flask, render_template, request, redirect, url_for, flash, jsonify, session
 )
 import psycopg2
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "secreto")
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=(os.environ.get("SESSION_COOKIE_SECURE", "0") == "1"),
+)
+
+# ========= Auth MUY SIMPLE (hardcode) =========
+AUTH_USERNAME = "COBROS"
+AUTH_PASSWORD = "COBROS 2025"  # OJO: incluye espacio
+
+def _verify_password(pwd: str) -> bool:
+    # comparación constante para evitar fugas por tiempo
+    return hmac.compare_digest(pwd, AUTH_PASSWORD)
+
+def _is_safe_next(target: str) -> bool:
+    if not target:
+        return False
+    u = urlparse(target)
+    # solo rutas relativas (sin esquema/host)
+    return not u.netloc and (u.path or "/") and not u.scheme
+
+def login_required(fn):
+    @wraps(fn)
+    def _wrap(*args, **kwargs):
+        if not session.get("auth_ok"):
+            nxt = request.path if request.method == "GET" else None
+            return redirect(url_for("login", next=nxt))
+        return fn(*args, **kwargs)
+    return _wrap
 
 # ========= Conexión a Neon =========
 RAW_DATABASE_URL = os.getenv(
@@ -268,7 +299,7 @@ def inject_totales():
         money=money
     )
 
-# ========= Salud =========
+# ========= Salud (pueden quedar públicas si quieres monitoreo) =========
 @app.get("/health")
 def health():
     try:
@@ -288,10 +319,42 @@ def dbcheck():
     except Exception as e:
         return jsonify(db="error", detail=str(e)), 500
 
+# ========= Auth Rutas =========
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "GET":
+        return render_template("login.html")
+
+    username = (request.form.get("username") or "")
+    password = request.form.get("password") or ""
+    next_url = request.args.get("next")
+
+    if not username or not password:
+        flash("Usuario y contraseña son obligatorios.", "warning")
+        return redirect(url_for("login", next=next_url))
+
+    if username == AUTH_USERNAME and _verify_password(password):
+        session["auth_ok"] = True
+        session["auth_user"] = username
+        flash("Sesión iniciada.", "success")
+        if next_url and _is_safe_next(next_url):
+            return redirect(next_url)
+        return redirect(url_for("home"))
+    else:
+        flash("Credenciales incorrectas.", "warning")
+        return redirect(url_for("login", next=next_url))
+
+@app.get("/logout")
+def logout():
+    session.clear()
+    flash("Sesión cerrada.", "info")
+    return redirect(url_for("login"))
+
 # ========= Rutas =========
 
 # Home: listado de clientes + totales históricos
 @app.route("/")
+@login_required
 def home():
     conn = get_connection()
     try:
@@ -319,16 +382,9 @@ def home():
     finally:
         conn.close()
 
-# Login (opcional)
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "GET":
-        return render_template("login.html")
-    flash("Inicio de sesión simulado.", "info")
-    return redirect(url_for("home"))
-
 # -------- Clientes --------
 @app.route("/clientes/nuevo", methods=["GET", "POST"])
+@login_required
 def cliente_nuevo():
     if request.method == "GET":
         return render_template("nuevo.html")  # nombre, monto_prestado, observaciones, fecha_prestamo (opcional)
@@ -369,6 +425,7 @@ def cliente_nuevo():
         conn.close()
 
 @app.route("/clientes/<int:cliente_id>/editar", methods=["GET", "POST"])
+@login_required
 def cliente_editar(cliente_id):
     conn = get_connection()
     try:
@@ -420,6 +477,7 @@ def cliente_editar(cliente_id):
         conn.close()
 
 @app.route("/clientes/<int:cliente_id>/eliminar", methods=["POST"])
+@login_required
 def cliente_eliminar(cliente_id):
     conn = get_connection()
     try:
@@ -432,18 +490,19 @@ def cliente_eliminar(cliente_id):
 
 # -------- Pagos --------
 @app.route("/pagos", methods=["GET"])
+@login_required
 def pagos_listado():
-    # --- NUEVO: filtro opcional por cliente ---
+    # Filtro opcional por cliente
     cliente_id_filtro = request.args.get("cliente_id", type=int)
 
     conn = get_connection()
     try:
         with conn, conn.cursor() as cur:
-            # Siempre cargo el listado de clientes para el <select>
+            # Listado de clientes para el <select>
             cur.execute("SELECT id, nombre FROM clientes ORDER BY nombre;")
             clientes = cur.fetchall()
 
-            # Pagos (todos o filtrados por cliente)
+            # Pagos (todos o filtrados)
             if cliente_id_filtro:
                 cur.execute("""
                     SELECT p.id, p.monto, p.fecha_pago, p.metodo, p.nota,
@@ -455,7 +514,7 @@ def pagos_listado():
                 """, (cliente_id_filtro,))
                 pagos = cur.fetchall()
 
-                # --- NUEVO: resumen del cliente seleccionado ---
+                # Resumen del cliente
                 cur.execute("""
                     SELECT id, nombre, monto_prestado, deuda_actual,
                            fecha_prestamo, fecha_ultimo_pago
@@ -480,7 +539,6 @@ def pagos_listado():
                     total_pagado=total_pagado_cli
                 )
             else:
-                # Sin filtro: comportamiento original
                 cur.execute("""
                     SELECT p.id, p.monto, p.fecha_pago, p.metodo, p.nota,
                            c.id AS cliente_id, c.nombre
@@ -489,13 +547,12 @@ def pagos_listado():
                     ORDER BY p.fecha_pago DESC, p.id DESC;
                 """)
                 pagos = cur.fetchall()
-                resumen = None  # no hay tarjeta resumen
+                resumen = None
 
-            # Total recaudado (histórico, como ya tenías)
+            # Totales
             cur.execute("SELECT COALESCE(SUM(monto),0) FROM pagos;")
             total_recaudado = cur.fetchone()[0]
 
-            # --- NUEVO: total de pagos del día (hoy) ---
             cur.execute("SELECT COALESCE(SUM(monto),0) FROM pagos WHERE fecha_pago = CURRENT_DATE;")
             total_hoy_pagos = cur.fetchone()[0]
 
@@ -504,14 +561,15 @@ def pagos_listado():
             pagos=pagos,
             clientes=clientes,
             total_recaudado=money(total_recaudado),
-            total_hoy_pagos=money(total_hoy_pagos),  # NUEVO
-            resumen=resumen,                          # NUEVO
-            cliente_id_filtro=cliente_id_filtro       # NUEVO (para marcar <select>)
+            total_hoy_pagos=money(total_hoy_pagos),
+            resumen=resumen,
+            cliente_id_filtro=cliente_id_filtro
         )
     finally:
         conn.close()
 
 @app.route("/pagos/nuevo", methods=["POST"])
+@login_required
 def pago_nuevo():
     cliente_id = request.form.get("cliente_id")
     monto = request.form.get("monto")
@@ -550,6 +608,7 @@ def pago_nuevo():
         conn.close()
 
 @app.route("/pagos/<int:pago_id>/editar", methods=["GET", "POST"])
+@login_required
 def pago_editar(pago_id):
     conn = get_connection()
     try:
@@ -595,6 +654,7 @@ def pago_editar(pago_id):
         conn.close()
 
 @app.route("/pagos/<int:pago_id>/eliminar", methods=["POST"])
+@login_required
 def pago_eliminar(pago_id):
     conn = get_connection()
     try:
@@ -607,6 +667,7 @@ def pago_eliminar(pago_id):
 
 # -------- Recaudo diario (vista nueva) --------
 @app.get("/pagos/diario")
+@login_required
 def pagos_diario():
     conn = get_connection()
     try:
@@ -621,7 +682,6 @@ def pagos_diario():
                 LIMIT 60;
             """)
             filas = cur.fetchall()
-        # filas: [(fecha, n_pagos, total), ...]
         return render_template("pagos_diario.html", filas=filas, money=money)
     finally:
         conn.close()
@@ -651,6 +711,7 @@ def _parse_amount_relajado(txt: str):
     return t
 
 @app.route("/efectivo", methods=["GET", "POST"])
+@login_required
 def efectivo():
     if request.method == "POST":
         try:
