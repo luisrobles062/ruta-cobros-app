@@ -10,9 +10,21 @@
     table{border-collapse:collapse;width:100%}
     th,td{border:1px solid #e5e7eb;padding:8px;text-align:left}
     th{background:#f9fafb}
+    .msg{padding:10px;border-radius:8px;margin:10px 0;background:#f1f5f9}
+    a{color:inherit}
   </style>
 </head>
 <body>
+
+  <!-- Snippet: usuario + Cerrar sesión -->
+  {% if session.get('auth_ok') %}
+    <div style="text-align:right;margin-bottom:8px">
+      <small>Usuario: {{ session.get('auth_user') }}</small>
+      &nbsp;·&nbsp;
+      <a href="{{ url_for('logout') }}">Cerrar sesión</a>
+    </div>
+  {% endif %}
+
   <h1>Recaudo por día (últimos 60)</h1>
   <p><a href="{{ url_for('pagos_listado') }}">← Volver a pagos</a></p>
 
