@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Recaudo por día</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body{font-family:system-ui,Arial,sans-serif;max-width:860px;margin:24px auto;padding:0 12px}
+    h1{margin-top:0}
+    table{border-collapse:collapse;width:100%}
+    th,td{border:1px solid #e5e7eb;padding:8px;text-align:left}
+    th{background:#f9fafb}
+  </style>
+</head>
+<body>
+  <h1>Recaudo por día (últimos 60)</h1>
+  <p><a href="{{ url_for('pagos_listado') }}">← Volver a pagos</a></p>
+
+  {% if filas and filas|length > 0 %}
+    <table>
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th># Pagos</th>
+          <th>Total recaudado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in filas %}
+          <tr>
+            <td>{{ f[0] }}</td>
+            <td style="text-align:center">{{ f[1] }}</td>
+            <td>{{ money(f[2]) }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No hay datos de recaudación diaria.</p>
+  {% endif %}
+</body>
+</html>
