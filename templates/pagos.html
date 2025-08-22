@@ -21,6 +21,16 @@
   </style>
 </head>
 <body>
+
+  <!-- Snippet: usuario + Cerrar sesión -->
+  {% if session.get('auth_ok') %}
+    <div style="text-align:right;margin-bottom:8px">
+      <small>Usuario: {{ session.get('auth_user') }}</small>
+      &nbsp;·&nbsp;
+      <a href="{{ url_for('logout') }}">Cerrar sesión</a>
+    </div>
+  {% endif %}
+
   <header>
     <h1>Pagos</h1>
     <a href="{{ url_for('home') }}">Inicio</a>
