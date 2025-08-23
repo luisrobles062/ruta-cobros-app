@@ -25,14 +25,12 @@ AUTH_USERNAME = "COBROS"
 AUTH_PASSWORD = "COBROS 2025"  # OJO: incluye espacio
 
 def _verify_password(pwd: str) -> bool:
-    # comparación constante para evitar fugas por tiempo
     return hmac.compare_digest(pwd, AUTH_PASSWORD)
 
 def _is_safe_next(target: str) -> bool:
     if not target:
         return False
     u = urlparse(target)
-    # solo rutas relativas (sin esquema/host)
     return not u.netloc and (u.path or "/") and not u.scheme
 
 def login_required(fn):
@@ -92,14 +90,13 @@ def parse_amount(txt: str) -> float:
     t = txt.strip()
     if not t:
         raise ValueError("empty")
-    # quita símbolos y espacios
     for ch in ["$", "€", "₡", "₲", "₵", "£", "¥", "₿", " "]:
         t = t.replace(ch, "")
     if "," in t and "." in t:
         if t.rfind(",") > t.rfind("."):
-            t = t.replace(".", "").replace(",", ".")  # coma decimal
+            t = t.replace(".", "").replace(",", ".")
         else:
-            t = t.replace(",", "")                    # punto decimal
+            t = t.replace(",", "")
     elif "," in t and "." not in t:
         t = t.replace(",", ".")
     return float(t)
@@ -152,7 +149,11 @@ ALTER TABLE clientes
   ADD COLUMN IF NOT EXISTS fecha_prestamo DATE NOT NULL DEFAULT CURRENT_DATE,
   ADD COLUMN IF NOT EXISTS fecha_ultimo_pago DATE;
 
--- 4) Tipos/constraints correctos (ya sin triggers molestando)
+-- (NUEVO) Columna de archivado para esconder clientes pagados
+ALTER TABLE clientes
+  ADD COLUMN IF NOT EXISTS archivado BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- 4) Tipos/constraints correctos
 ALTER TABLE clientes
   ALTER COLUMN monto_prestado TYPE NUMERIC(12,2) USING monto_prestado::numeric,
   ALTER COLUMN deuda_actual   TYPE NUMERIC(12,2) USING deuda_actual::numeric,
@@ -176,13 +177,19 @@ CREATE TABLE IF NOT EXISTS efectivo_diario (
 -- 7) Funciones y triggers de recálculo
 CREATE OR REPLACE FUNCTION recalc_deuda_fn(p_cid int)
 RETURNS void AS $$
+DECLARE
+  v_total NUMERIC(14,2);
+  v_prestado NUMERIC(14,2);
+  v_nueva NUMERIC(14,2);
 BEGIN
-  UPDATE clientes c
-  SET deuda_actual = GREATEST(
-      0,
-      c.monto_prestado - COALESCE((SELECT SUM(monto) FROM pagos WHERE cliente_id = p_cid), 0)
-  )
-  WHERE c.id = p_cid;
+  SELECT COALESCE(SUM(monto),0) INTO v_total FROM pagos WHERE cliente_id = p_cid;
+  SELECT monto_prestado INTO v_prestado FROM clientes WHERE id = p_cid;
+  v_nueva := GREATEST(0, v_prestado - v_total);
+
+  UPDATE clientes
+  SET deuda_actual = v_nueva,
+      archivado   = (v_nueva <= 0)
+  WHERE id = p_cid;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -260,6 +267,9 @@ FROM (
   FROM pagos GROUP BY cliente_id
 ) p
 WHERE c.id = p.cliente_id;
+
+-- Backfill de archivado según deuda_actual
+UPDATE clientes SET archivado = (deuda_actual <= 0);
 """
 
 def init_schema():
@@ -285,7 +295,6 @@ def inject_totales():
         with get_connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT COALESCE(SUM(deuda_actual),0) FROM clientes;")
             deuda_total = float(cur.fetchone()[0] or 0)
-            # SUM por si existieran filas duplicadas
             cur.execute("SELECT COALESCE(SUM(monto),0) FROM efectivo_diario WHERE fecha = CURRENT_DATE;")
             row = cur.fetchone()
             efectivo_hoy = float((row[0] if row else 0) or 0)
@@ -299,7 +308,7 @@ def inject_totales():
         money=money
     )
 
-# ========= Salud (pueden quedar públicas si quieres monitoreo) =========
+# ========= Salud =========
 @app.get("/health")
 def health():
     try:
@@ -352,7 +361,7 @@ def logout():
 
 # ========= Rutas =========
 
-# Home: listado de clientes + totales históricos
+# Home: listado de clientes morosos (solo con deuda > 0 y no archivados)
 @app.route("/")
 @login_required
 def home():
@@ -363,11 +372,12 @@ def home():
                 SELECT id, nombre, monto_prestado, deuda_actual, COALESCE(observaciones,'') AS obs,
                        fecha_prestamo, fecha_ultimo_pago
                 FROM clientes
+                WHERE archivado = FALSE AND deuda_actual > 0
                 ORDER BY id DESC;
             """)
             clientes = cur.fetchall()
 
-            cur.execute("SELECT COUNT(*) FROM clientes;")
+            cur.execute("SELECT COUNT(*) FROM clientes WHERE archivado = FALSE AND deuda_actual > 0;")
             total_clientes = cur.fetchone()[0]
 
             cur.execute("SELECT COALESCE(SUM(monto),0) FROM pagos;")
@@ -382,12 +392,43 @@ def home():
     finally:
         conn.close()
 
-# -------- Clientes --------
+# -------- Clientes (archivados/pagados) --------
+@app.get("/clientes/archivados")
+@login_required
+def clientes_archivados():
+    conn = get_connection()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, nombre, monto_prestado, deuda_actual, fecha_prestamo, fecha_ultimo_pago
+                FROM clientes
+                WHERE archivado = TRUE OR deuda_actual = 0
+                ORDER BY id DESC;
+            """)
+            filas = cur.fetchall()
+        return render_template("clientes_archivados.html", filas=filas, money=money)
+    finally:
+        conn.close()
+
+@app.post("/clientes/<int:cliente_id>/eliminar_def")
+@login_required
+def cliente_eliminar_def(cliente_id):
+    # CUIDADO: borra cliente y sus pagos (ON DELETE CASCADE)
+    conn = get_connection()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM clientes WHERE id=%s;", (cliente_id,))
+        flash("Cliente eliminado definitivamente.", "success")
+        return redirect(url_for("clientes_archivados"))
+    finally:
+        conn.close()
+
+# -------- Clientes CRUD existente --------
 @app.route("/clientes/nuevo", methods=["GET", "POST"])
 @login_required
 def cliente_nuevo():
     if request.method == "GET":
-        return render_template("nuevo.html")  # nombre, monto_prestado, observaciones, fecha_prestamo (opcional)
+        return render_template("nuevo.html")
 
     nombre = (request.form.get("nombre") or "").strip()
     monto_raw = (request.form.get("monto_prestado") or "").strip()
@@ -492,17 +533,15 @@ def cliente_eliminar(cliente_id):
 @app.route("/pagos", methods=["GET"])
 @login_required
 def pagos_listado():
-    # Filtro opcional por cliente
     cliente_id_filtro = request.args.get("cliente_id", type=int)
 
     conn = get_connection()
     try:
         with conn, conn.cursor() as cur:
-            # Listado de clientes para el <select>
-            cur.execute("SELECT id, nombre FROM clientes ORDER BY nombre;")
+            # Listado de clientes activos (no archivados) para el <select>
+            cur.execute("SELECT id, nombre FROM clientes WHERE archivado = FALSE ORDER BY nombre;")
             clientes = cur.fetchall()
 
-            # Pagos (todos o filtrados)
             if cliente_id_filtro:
                 cur.execute("""
                     SELECT p.id, p.monto, p.fecha_pago, p.metodo, p.nota,
@@ -514,7 +553,6 @@ def pagos_listado():
                 """, (cliente_id_filtro,))
                 pagos = cur.fetchall()
 
-                # Resumen del cliente
                 cur.execute("""
                     SELECT id, nombre, monto_prestado, deuda_actual,
                            fecha_prestamo, fecha_ultimo_pago
@@ -544,12 +582,12 @@ def pagos_listado():
                            c.id AS cliente_id, c.nombre
                     FROM pagos p
                     JOIN clientes c ON c.id = p.cliente_id
+                    WHERE c.archivado = FALSE
                     ORDER BY p.fecha_pago DESC, p.id DESC;
                 """)
                 pagos = cur.fetchall()
                 resumen = None
 
-            # Totales
             cur.execute("SELECT COALESCE(SUM(monto),0) FROM pagos;")
             total_recaudado = cur.fetchone()[0]
 
@@ -622,7 +660,8 @@ def pago_editar(pago_id):
                 """, (pago_id,))
                 pago = cur.fetchone()
 
-                cur.execute("SELECT id, nombre FROM clientes ORDER BY nombre;")
+                # Dropdown sólo con clientes activos
+                cur.execute("SELECT id, nombre FROM clientes WHERE archivado = FALSE ORDER BY nombre;")
                 clientes = cur.fetchall()
 
             if not pago:
@@ -665,35 +704,8 @@ def pago_eliminar(pago_id):
     finally:
         conn.close()
 
-# -------- Recaudo diario (vista nueva) --------
-@app.get("/pagos/diario")
-@login_required
-def pagos_diario():
-    conn = get_connection()
-    try:
-        with conn, conn.cursor() as cur:
-            cur.execute("""
-                SELECT fecha_pago::date AS fecha,
-                       COUNT(*) AS n_pagos,
-                       COALESCE(SUM(monto),0) AS total
-                FROM pagos
-                GROUP BY fecha
-                ORDER BY fecha DESC
-                LIMIT 60;
-            """)
-            filas = cur.fetchall()
-        return render_template("pagos_diario.html", filas=filas, money=money)
-    finally:
-        conn.close()
-
 # -------- Efectivo (caja diaria) --------
 def _parse_amount_relajado(txt: str):
-    """
-    123,45 -> '123.45'
-    1.234,56 -> '1234.56'
-    1,234.56 -> '1234.56'
-    "" -> None
-    """
     if txt is None:
         return None
     t = txt.strip()
@@ -718,12 +730,11 @@ def efectivo():
             monto_txt = (request.form.get("monto") or "").strip()
             fecha_str = (request.form.get("fecha") or "").strip()
 
-            # 1) Parseo robusto del monto (acepta vacío = 0.00)
             if monto_txt == "":
                 monto = Decimal("0.00")
             else:
                 try:
-                    monto = Decimal(monto_txt)  # "123" o "123.45"
+                    monto = Decimal(monto_txt)
                 except InvalidOperation:
                     normalizado = _parse_amount_relajado(monto_txt)
                     if not normalizado:
@@ -737,14 +748,12 @@ def efectivo():
 
             monto = monto.quantize(Decimal("0.01"))
 
-            # 2) Fecha: si viene vacía, usa HOY
             try:
                 f = date.fromisoformat(fecha_str) if fecha_str else date.today()
             except Exception:
                 flash("Fecha inválida (usa AAAA-MM-DD).", "warning")
                 return redirect(url_for("efectivo"))
 
-            # 3) DB: asegura tabla y guarda (sin ON CONFLICT)
             with get_connection() as conn, conn.cursor() as cur:
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS efectivo_diario (
@@ -752,7 +761,6 @@ def efectivo():
                       monto NUMERIC(14,2) NOT NULL DEFAULT 0
                     );
                 """)
-                # Intentamos actualizar primero por fecha
                 cur.execute("UPDATE efectivo_diario SET monto = %s WHERE fecha = %s;", (monto, f))
                 if cur.rowcount == 0:
                     cur.execute("INSERT INTO efectivo_diario (fecha, monto) VALUES (%s, %s);", (f, monto))
@@ -760,14 +768,11 @@ def efectivo():
             return redirect(url_for("efectivo"))
 
         except Exception as e:
-            # Cualquier error: mensaje amigable y log
             print("ERROR /efectivo POST:", repr(e))
             flash(f"Error al guardar efectivo: {e}", "warning")
             return redirect(url_for("efectivo"))
 
-    # GET
     with get_connection() as conn, conn.cursor() as cur:
-        # SUM por si existieran duplicados de la misma fecha
         cur.execute("SELECT COALESCE(SUM(monto),0) FROM efectivo_diario WHERE fecha=CURRENT_DATE;")
         row = cur.fetchone()
         efectivo_hoy = float((row[0] if row else 0) or 0)
@@ -781,6 +786,27 @@ def efectivo():
         """)
         historico = cur.fetchall()
     return render_template("efectivo.html", efectivo_hoy=efectivo_hoy, historico=historico)
+
+# -------- Recaudo diario (ya existente) --------
+@app.get("/pagos/diario")
+@login_required
+def pagos_diario():
+    conn = get_connection()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute("""
+                SELECT fecha_pago::date AS fecha,
+                       COUNT(*) AS n_pagos,
+                       COALESCE(SUM(monto),0) AS total
+                FROM pagos
+                GROUP BY fecha
+                ORDER BY fecha DESC
+                LIMIT 60;
+            """)
+            filas = cur.fetchall()
+        return render_template("pagos_diario.html", filas=filas, money=money)
+    finally:
+        conn.close()
 
 # -------- Main --------
 if __name__ == "__main__":
