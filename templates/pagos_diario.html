@@ -4,51 +4,44 @@
   <meta charset="utf-8">
   <title>Recaudo por día</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body{font-family:system-ui,Arial,sans-serif;max-width:860px;margin:24px auto;padding:0 12px}
-    h1{margin-top:0}
-    table{border-collapse:collapse;width:100%}
-    th,td{border:1px solid #e5e7eb;padding:8px;text-align:left}
-    th{background:#f9fafb}
-    .msg{padding:10px;border-radius:8px;margin:10px 0;background:#f1f5f9}
-    a{color:inherit}
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body>
+  {% include "_navbar.html" %}
+  <div class="container">
 
-  <!-- Snippet: usuario + Cerrar sesión -->
-  {% if session.get('auth_ok') %}
-    <div style="text-align:right;margin-bottom:8px">
-      <small>Usuario: {{ session.get('auth_user') }}</small>
-      &nbsp;·&nbsp;
-      <a href="{{ url_for('logout') }}">Cerrar sesión</a>
+    <div class="header">
+      <h1 class="h1">Recaudo por día (últimos 60)</h1>
+      <div class="actions">
+        <a class="btn" href="{{ url_for('pagos_listado') }}">← Volver a pagos</a>
+      </div>
     </div>
-  {% endif %}
 
-  <h1>Recaudo por día (últimos 60)</h1>
-  <p><a href="{{ url_for('pagos_listado') }}">← Volver a pagos</a></p>
+    <div class="card">
+      {% if filas and filas|length > 0 %}
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th># Pagos</th>
+              <th>Total recaudado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for f in filas %}
+              <tr>
+                <td>{{ f[0] }}</td>
+                <td>{{ f[1] }}</td>
+                <td>{{ money(f[2]) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">No hay datos de recaudación diaria.</p>
+      {% endif %}
+    </div>
 
-  {% if filas and filas|length > 0 %}
-    <table>
-      <thead>
-        <tr>
-          <th>Fecha</th>
-          <th># Pagos</th>
-          <th>Total recaudado</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for f in filas %}
-          <tr>
-            <td>{{ f[0] }}</td>
-            <td style="text-align:center">{{ f[1] }}</td>
-            <td>{{ money(f[2]) }}</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <p>No hay datos de recaudación diaria.</p>
-  {% endif %}
+  </div>
 </body>
 </html>
