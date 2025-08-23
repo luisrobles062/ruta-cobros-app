@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Clientes pagados / archivados</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body{font-family:system-ui,Arial,sans-serif;max-width:980px;margin:24px auto;padding:0 12px}
+    table{border-collapse:collapse;width:100%}
+    th,td{border:1px solid #e5e7eb;padding:8px;text-align:left}
+    th{background:#f9fafb}
+    .msg{padding:10px;border-radius:8px;margin:10px 0;background:#f1f5f9}
+    .actions form{display:inline}
+    a.button, button{padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;background:#fff;cursor:pointer;text-decoration:none}
+  </style>
+</head>
+<body>
+  {% if session.get('auth_ok') %}
+    <div style="text-align:right;margin-bottom:8px">
+      <small>Usuario: {{ session.get('auth_user') }}</small>
+      &nbsp;·&nbsp;
+      <a href="{{ url_for('logout') }}">Cerrar sesión</a>
+    </div>
+  {% endif %}
+
+  <h1>Clientes pagados / archivados</h1>
+  <p>
+    <a class="button" href="{{ url_for('home') }}">← Volver a morosos</a>
+  </p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="msg">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  {% if filas and filas|length > 0 %}
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nombre</th>
+          <th>Monto prestado</th>
+          <th>Deuda actual</th>
+          <th>Fecha préstamo</th>
+          <th>Último pago</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in filas %}
+          <tr>
+            <td>{{ c[0] }}</td>
+            <td>{{ c[1] }}</td>
+            <td>{{ money(c[2]) }}</td>
+            <td>{{ money(c[3]) }}</td>
+            <td>{{ c[4] }}</td>
+            <td>{{ c[5] or '—' }}</td>
+            <td class="actions">
+              <a class="button" href="{{ url_for('cliente_editar', cliente_id=c[0]) }}">Editar</a>
+              <form method="post" action="{{ url_for('cliente_eliminar_def', cliente_id=c[0]) }}" onsubmit="return confirm('¿Eliminar DEFINITIVAMENTE al cliente y todos sus pagos?')">
+                <button type="submit">Eliminar definitivo</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No hay clientes pagados/archivados.</p>
+  {% endif %}
+</body>
+</html>
