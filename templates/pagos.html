@@ -4,171 +4,142 @@
   <meta charset="utf-8">
   <title>Pagos</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body{font-family:system-ui,Arial,sans-serif;max-width:980px;margin:24px auto;padding:0 12px}
-    header{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
-    h1{margin:0}
-    .row{display:flex;gap:16px;flex-wrap:wrap}
-    .card{border:1px solid #e5e7eb;border-radius:10px;padding:14px}
-    table{border-collapse:collapse;width:100%}
-    th,td{border:1px solid #e5e7eb;padding:8px;text-align:left}
-    th{background:#f9fafb}
-    .actions form{display:inline}
-    .msg{padding:10px;border-radius:8px;margin:10px 0;background:#f1f5f9}
-    label{font-weight:600}
-    input,select,button,textarea{padding:8px;border:1px solid #d1d5db;border-radius:8px}
-    button{cursor:pointer}
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body>
+  {% include "_navbar.html" %}
+  <div class="container">
 
-  <!-- Snippet: usuario + Cerrar sesión -->
-  {% if session.get('auth_ok') %}
-    <div style="text-align:right;margin-bottom:8px">
-      <small>Usuario: {{ session.get('auth_user') }}</small>
-      &nbsp;·&nbsp;
-      <a href="{{ url_for('logout') }}">Cerrar sesión</a>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="header">
+      <h1 class="h1">Pagos</h1>
+      <div class="actions">
+        <span class="badge">Hoy: {{ total_hoy_pagos }}</span>
+        <span class="badge">Histórico: {{ total_recaudado }}</span>
+        <a class="btn" href="{{ url_for('pagos_diario') }}">Recaudo por día</a>
+      </div>
     </div>
-  {% endif %}
 
-  <header>
-    <h1>Pagos</h1>
-    <a href="{{ url_for('home') }}">Inicio</a>
-    <a href="{{ url_for('pagos_diario') }}">Recaudo por día</a>
-  </header>
-
-  <!-- Mensajes flash -->
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-      {% for category, message in messages %}
-        <div class="msg">{{ message }}</div>
-      {% endfor %}
-    {% endif %}
-  {% endwith %}
-
-  <div class="row">
-    <!-- Filtro por cliente -->
-    <div class="card" style="flex:1 1 320px;">
-      <form method="get" action="{{ url_for('pagos_listado') }}">
-        <div style="display:grid;gap:8px">
-          <label for="cliente_id">Filtrar por cliente</label>
-          <select name="cliente_id" id="cliente_id">
-            <option value="">-- Todos --</option>
-            {% for c in clientes %}
-              <option value="{{ c[0] }}" {% if cliente_id_filtro == c[0] %}selected{% endif %}>
-                {{ c[1] }}
-              </option>
-            {% endfor %}
-          </select>
-          <div style="display:flex;gap:8px">
-            <button type="submit">Aplicar filtro</button>
+    <div class="grid cols-2">
+      <div class="card">
+        <form method="get" action="{{ url_for('pagos_listado') }}" class="form">
+          <div class="field">
+            <label>Filtrar por cliente</label>
+            <select name="cliente_id">
+              <option value="">-- Todos --</option>
+              {% for c in clientes %}
+                <option value="{{ c[0] }}" {% if cliente_id_filtro == c[0] %}selected{% endif %}>{{ c[1] }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="actions">
+            <button class="btn primary" type="submit">Aplicar filtro</button>
             {% if cliente_id_filtro %}
-              <a href="{{ url_for('pagos_listado') }}" style="align-self:center">Quitar filtro</a>
+              <a class="btn" href="{{ url_for('pagos_listado') }}">Quitar filtro</a>
             {% endif %}
           </div>
+        </form>
+      </div>
+
+      {% if resumen %}
+      <div class="card">
+        <div class="header" style="margin:0 0 8px 0">
+          <h2 class="h1" style="font-size:18px">Resumen de {{ resumen.nombre }}</h2>
+        </div>
+        <div class="grid cols-2">
+          <div class="kpi"><div class="label">Monto prestado</div><div class="value">{{ money(resumen.monto_prestado) }}</div></div>
+          <div class="kpi"><div class="label">Deuda actual</div><div class="value">{{ money(resumen.deuda_actual) }}</div></div>
+          <div class="kpi"><div class="label">Total pagado</div><div class="value">{{ money(resumen.total_pagado) }}</div></div>
+          <div class="kpi"><div class="label">Último pago</div><div class="value">{{ resumen.fecha_ultimo_pago or '—' }}</div></div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h2 class="h1" style="font-size:18px;margin:0 0 8px 0">Registrar pago</h2>
+      <form method="post" action="{{ url_for('pago_nuevo') }}" class="form">
+        <div class="fields">
+          <div class="field">
+            <label>Cliente</label>
+            <select name="cliente_id" required>
+              <option value="">Seleccione…</option>
+              {% for c in clientes %}
+                <option value="{{ c[0] }}" {% if cliente_id_filtro == c[0] %}selected{% endif %}>{{ c[1] }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label>Monto</label>
+            <input name="monto" placeholder="Ej: 25.000" required>
+          </div>
+          <div class="field">
+            <label>Fecha</label>
+            <input type="date" name="fecha_pago">
+          </div>
+          <div class="field">
+            <label>Método</label>
+            <input name="metodo" placeholder="Efectivo, Nequi, etc.">
+          </div>
+          <div class="field" style="flex:2 1 320px">
+            <label>Nota</label>
+            <input name="nota" placeholder="Observaciones (opcional)">
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn primary" type="submit">Guardar pago</button>
         </div>
       </form>
     </div>
 
-    <!-- Totales -->
-    <div class="card" style="flex:1 1 260px;">
-      <p><strong>Total recaudado hoy (pagos):</strong> {{ total_hoy_pagos }}</p>
-      <p><strong>Total recaudado histórico:</strong> {{ total_recaudado }}</p>
-      <p style="margin:0"><a href="{{ url_for('pagos_diario') }}">Ver tabla por día →</a></p>
-    </div>
-  </div>
-
-  <!-- Resumen del cliente (si hay filtro) -->
-  {% if resumen %}
-    <div class="card" style="margin-top:12px">
-      <h3 style="margin-top:0;margin-bottom:8px">Resumen de {{ resumen.nombre }}</h3>
-      <div class="row">
-        <div><strong>Monto prestado:</strong> {{ money(resumen.monto_prestado) }}</div>
-        <div><strong>Total pagado:</strong> {{ money(resumen.total_pagado) }}</div>
-        <div><strong>Deuda actual:</strong> {{ money(resumen.deuda_actual) }}</div>
-      </div>
-      <div class="row" style="margin-top:6px">
-        <div><strong>Fecha de préstamo:</strong> {{ resumen.fecha_prestamo }}</div>
-        <div><strong>Último pago:</strong> {{ resumen.fecha_ultimo_pago or '—' }}</div>
-      </div>
-    </div>
-  {% endif %}
-
-  <!-- Registrar pago -->
-  <div class="card" style="margin-top:12px">
-    <h3 style="margin-top:0">Registrar pago</h3>
-    <form method="post" action="{{ url_for('pago_nuevo') }}">
-      <div class="row" style="align-items:flex-end">
-        <div style="display:grid;gap:6px;flex:1 1 220px">
-          <label for="cliente_id_new">Cliente</label>
-          <select name="cliente_id" id="cliente_id_new" required>
-            <option value="">Seleccione…</option>
-            {% for c in clientes %}
-              <option value="{{ c[0] }}" {% if cliente_id_filtro == c[0] %}selected{% endif %}>{{ c[1] }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div style="display:grid;gap:6px;flex:1 1 160px">
-          <label for="monto">Monto</label>
-          <input name="monto" id="monto" placeholder="Ej: 25.000" required>
-        </div>
-        <div style="display:grid;gap:6px;flex:1 1 160px">
-          <label for="fecha_pago">Fecha</label>
-          <input type="date" name="fecha_pago" id="fecha_pago">
-        </div>
-        <div style="display:grid;gap:6px;flex:1 1 160px">
-          <label for="metodo">Método</label>
-          <input name="metodo" id="metodo" placeholder="Efectivo, Nequi, etc.">
-        </div>
-        <div style="display:grid;gap:6px;flex:3 1 260px">
-          <label for="nota">Nota</label>
-          <input name="nota" id="nota" placeholder="Observaciones (opcional)">
-        </div>
-        <div>
-          <button type="submit">Guardar pago</button>
-        </div>
-      </div>
-    </form>
-  </div>
-
-  <!-- Tabla de pagos -->
-  <div class="card" style="margin-top:12px">
-    <h3 style="margin-top:0">Listado de pagos{% if cliente_id_filtro %} (cliente filtrado){% endif %}</h3>
-    {% if pagos and pagos|length > 0 %}
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Fecha</th>
-            <th>Cliente</th>
-            <th>Monto</th>
-            <th>Método</th>
-            <th>Nota</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for p in pagos %}
+    <div class="card" style="margin-top:14px">
+      <h2 class="h1" style="font-size:18px;margin:0 0 8px 0">Listado de pagos{% if cliente_id_filtro %} (cliente filtrado){% endif %}</h2>
+      {% if pagos and pagos|length > 0 %}
+        <table class="table">
+          <thead>
             <tr>
-              <td>{{ p[0] }}</td>
-              <td>{{ p[2] }}</td>
-              <td><a href="{{ url_for('pagos_listado', cliente_id=p[5]) }}">{{ p[6] }}</a></td>
-              <td>{{ money(p[1]) }}</td>
-              <td>{{ p[3] or '—' }}</td>
-              <td>{{ p[4] or '—' }}</td>
-              <td class="actions">
-                <a href="{{ url_for('pago_editar', pago_id=p[0]) }}">Editar</a>
-                <form method="post" action="{{ url_for('pago_eliminar', pago_id=p[0]) }}" onsubmit="return confirm('¿Eliminar este pago?')">
-                  <button type="submit">Eliminar</button>
-                </form>
-              </td>
+              <th>ID</th>
+              <th>Fecha</th>
+              <th>Cliente</th>
+              <th>Monto</th>
+              <th>Método</th>
+              <th>Nota</th>
+              <th class="right">Acciones</th>
             </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% else %}
-      <p>No hay pagos para mostrar.</p>
-    {% endif %}
+          </thead>
+          <tbody>
+            {% for p in pagos %}
+              <tr>
+                <td>{{ p[0] }}</td>
+                <td>{{ p[2] }}</td>
+                <td><a href="{{ url_for('pagos_listado', cliente_id=p[5]) }}">{{ p[6] }}</a></td>
+                <td>{{ money(p[1]) }}</td>
+                <td>{{ p[3] or '—' }}</td>
+                <td>{{ p[4] or '—' }}</td>
+                <td class="right">
+                  <div class="actions" style="justify-content:flex-end">
+                    <a class="btn small" href="{{ url_for('pago_editar', pago_id=p[0]) }}">Editar</a>
+                    <form method="post" action="{{ url_for('pago_eliminar', pago_id=p[0]) }}" onsubmit="return confirm('¿Eliminar este pago?')">
+                      <button class="btn small danger" type="submit">Eliminar</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">No hay pagos para mostrar.</p>
+      {% endif %}
+    </div>
+
   </div>
 </body>
 </html>
