@@ -1,72 +1,104 @@
-{% extends "base.html" %}
-{% block title %}Clientes - Ruta de Cobros{% endblock %}
-{% block content %}
-<div class="d-flex align-items-center justify-content-between mb-3">
-  <h1 class="h4 mb-0">Clientes</h1>
-  <div>
-    <a class="btn btn-outline-secondary me-2" href="{{ url_for('pagos_listado') }}">Ver pagos</a>
-    <a class="btn btn-primary" href="{{ url_for('cliente_nuevo') }}">Nuevo cliente</a>
-  </div>
-</div>
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Clientes morosos</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body{font-family:system-ui,Arial,sans-serif;max-width:1100px;margin:24px auto;padding:0 12px}
+    header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+    .nav{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    a.button, button{padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;background:#fff;cursor:pointer;text-decoration:none}
+    .msg{padding:10px;border-radius:8px;margin:10px 0;background:#f1f5f9}
+    .cards{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0}
+    .card{border:1px solid #e5e7eb;border-radius:10px;padding:14px;min-width:240px}
+    table{border-collapse:collapse;width:100%}
+    th,td{border:1px solid #e5e7eb;padding:8px;text-align:left;vertical-align:top}
+    th{background:#f9fafb}
+    .actions form{display:inline}
+    small.muted{color:#6b7280}
+  </style>
+</head>
+<body>
 
-<div class="row g-3 mb-3">
-  <div class="col-md-4">
-    <div class="card border-0 shadow-sm">
-      <div class="card-body">
-        <div class="text-muted">Total clientes</div>
-        <div class="fs-4 fw-bold">{{ total_clientes }}</div>
-      </div>
+  <!-- Snippet: usuario + Cerrar sesión -->
+  {% if session.get('auth_ok') %}
+    <div style="text-align:right;margin-bottom:8px">
+      <small>Usuario: {{ session.get('auth_user') }}</small>
+      &nbsp;·&nbsp;
+      <a href="{{ url_for('logout') }}">Cerrar sesión</a>
+    </div>
+  {% endif %}
+
+  <header>
+    <h1 style="margin:0">Clientes morosos</h1>
+    <div class="nav">
+      <a class="button" href="{{ url_for('clientes_archivados') }}">Clientes pagados</a>
+      <a class="button" href="{{ url_for('pagos_listado') }}">Pagos</a>
+      <a class="button" href="{{ url_for('pagos_diario') }}">Recaudo por día</a>
+      <a class="button" href="{{ url_for('efectivo') }}">Efectivo</a>
+      <a class="button" href="{{ url_for('cliente_nuevo') }}">+ Nuevo cliente</a>
+    </div>
+  </header>
+
+  <!-- Mensajes flash -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="msg">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <!-- Tarjetas de totales -->
+  <div class="cards">
+    <div class="card">
+      <div><strong>Clientes morosos:</strong> {{ total_clientes }}</div>
+      <div><strong>Total recaudado (histórico):</strong> {{ total_recaudado }}</div>
+      <div><small class="muted">Deuda total (todos): {{ money(deuda_total) }}</small></div>
+      <div><small class="muted">Efectivo hoy (caja): {{ money(efectivo_hoy) }}</small></div>
+      <div><small class="muted">Total general (deuda + caja): {{ money(total_general) }}</small></div>
     </div>
   </div>
-  <div class="col-md-4">
-    <div class="card border-0 shadow-sm">
-      <div class="card-body">
-        <div class="text-muted">Total recaudado (histórico)</div>
-        <div class="fs-4 fw-bold">{{ total_recaudado }}</div>
-      </div>
-    </div>
-  </div>
-</div>
 
-<div class="card border-0 shadow-sm">
-  <div class="card-body">
-    <div class="table-responsive">
-      <table class="table table-sm align-middle">
-        <thead class="table-light">
-          <tr>
-            <th>ID</th>
-            <th>Nombre</th>
-            <th>Monto prestado</th>
-            <th>Deuda actual</th>
-            <th>Fecha préstamo</th>
-            <th>Último pago</th>
-            <th>Observaciones</th>
-            <th style="width:160px;">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
+  <!-- Tabla de clientes (solo con deuda > 0 y no archivados) -->
+  {% if clientes and clientes|length > 0 %}
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nombre</th>
+          <th>Monto prestado</th>
+          <th>Deuda actual</th>
+          <th>Fecha préstamo</th>
+          <th>Último pago</th>
+          <th>Observaciones</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
         {% for c in clientes %}
           <tr>
             <td>{{ c[0] }}</td>
             <td>{{ c[1] }}</td>
-            <td>{{ "${:,.2f}".format(c[2]|float) }}</td>
-            <td>{{ "${:,.2f}".format(c[3]|float) }}</td>
+            <td>{{ money(c[2]) }}</td>
+            <td>{{ money(c[3]) }}</td>
             <td>{{ c[5] }}</td>
-            <td>{{ c[6] or '-' }}</td>
-            <td>{{ c[4] }}</td>
-            <td>
-              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('cliente_editar', cliente_id=c[0]) }}">Editar</a>
-              <form class="d-inline" method="POST" action="{{ url_for('cliente_eliminar', cliente_id=c[0]) }}" onsubmit="return confirm('¿Eliminar cliente?');">
-                <button class="btn btn-sm btn-outline-danger">Eliminar</button>
+            <td>{{ c[6] or '—' }}</td>
+            <td>{{ c[4] or '—' }}</td>
+            <td class="actions">
+              <a class="button" href="{{ url_for('cliente_editar', cliente_id=c[0]) }}">Editar</a>
+              <form method="post" action="{{ url_for('cliente_eliminar', cliente_id=c[0]) }}" onsubmit="return confirm('¿Eliminar este cliente? Se eliminarán también sus pagos.')">
+                <button type="submit">Eliminar</button>
               </form>
             </td>
           </tr>
-        {% else %}
-          <tr><td colspan="8" class="text-center text-muted">Sin clientes aún.</td></tr>
         {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-{% endblock %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No hay clientes con deuda. Revisa <a href="{{ url_for('clientes_archivados') }}">Clientes pagados</a>.</p>
+  {% endif %}
+
+</body>
+</html>
