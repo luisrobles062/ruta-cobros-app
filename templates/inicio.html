@@ -1,90 +1,40 @@
-<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8">
-  <title>Clientes morosos</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
-</head>
-<body>
-  {% include "_navbar.html" %}
-  <div class="container">
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3>Clientes con deuda activa</h3>
+  <a class="btn btn-success btn-sm" href="{{ url_for('cliente_nuevo') }}">+ Nuevo cliente</a>
+</div>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="flash {{ category }}">{{ message }}</div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
+<p>Total de clientes activos con deuda: <strong>{{ total_clientes }}</strong></p>
+<p>Total recaudado (histórico): <strong>{{ total_recaudado }}</strong></p>
 
-    <div class="header">
-      <h1 class="h1">Clientes morosos</h1>
-      <div class="actions">
-        <a class="btn" href="{{ url_for('cliente_nuevo') }}">+ Nuevo cliente</a>
-      </div>
-    </div>
-
-    <div class="kpis">
-      <div class="kpi">
-        <div class="label">Clientes morosos</div>
-        <div class="value">{{ total_clientes }}</div>
-      </div>
-      <div class="kpi">
-        <div class="label">Recaudado histórico</div>
-        <div class="value">{{ total_recaudado }}</div>
-      </div>
-      <div class="kpi">
-        <div class="label">Deuda total</div>
-        <div class="value">{{ money(deuda_total) }}</div>
-      </div>
-      <div class="kpi">
-        <div class="label">Efectivo hoy (caja)</div>
-        <div class="value">{{ money(efectivo_hoy) }}</div>
-      </div>
-    </div>
-
-    <div class="card" style="margin-top:14px">
-      {% if clientes and clientes|length>0 %}
-        <table class="table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Nombre</th>
-              <th>Monto prestado</th>
-              <th>Deuda actual</th>
-              <th>Fecha préstamo</th>
-              <th>Último pago</th>
-              <th>Observaciones</th>
-              <th class="right">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for c in clientes %}
-            <tr>
-              <td>{{ c[0] }}</td>
-              <td>{{ c[1] }}</td>
-              <td>{{ money(c[2]) }}</td>
-              <td>{{ money(c[3]) }}</td>
-              <td>{{ c[5] }}</td>
-              <td>{{ c[6] or '—' }}</td>
-              <td>{{ c[4] or '—' }}</td>
-              <td class="right">
-                <div class="actions" style="justify-content:flex-end">
-                  <a class="btn small" href="{{ url_for('cliente_editar', cliente_id=c[0]) }}">Editar</a>
-                  <form method="post" action="{{ url_for('cliente_eliminar', cliente_id=c[0]) }}" onsubmit="return confirm('¿Eliminar este cliente? Se eliminarán también sus pagos.')">
-                    <button class="btn small danger" type="submit">Eliminar</button>
-                  </form>
-                </div>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      {% else %}
-        <p class="muted">No hay clientes con deuda. Revisa <a href="{{ url_for('clientes_archivados') }}">Clientes pagados</a>.</p>
-      {% endif %}
-    </div>
-  </div>
-</body>
-</html>
+<div class="table-responsive">
+<table class="table table-sm table-striped">
+  <thead>
+    <tr>
+      <th>ID</th><th>Nombre</th><th>Prestado</th><th>Deuda</th>
+      <th>F. Préstamo</th><th>Últ. Pago</th><th>Obs</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for c in clientes %}
+    <tr>
+      <td>{{ c[0] }}</td>
+      <td>{{ c[1] }}</td>
+      <td>{{ money(c[2]) }}</td>
+      <td>{{ money(c[3]) }}</td>
+      <td>{{ c[5] }}</td>
+      <td>{{ c[6] or '' }}</td>
+      <td>{{ c[4] }}</td>
+      <td>
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('cliente_editar', cliente_id=c[0]) }}">Editar</a>
+        <form class="d-inline" method="post" action="{{ url_for('cliente_eliminar', cliente_id=c[0]) }}" onsubmit="return confirm('¿Eliminar cliente?')">
+          <button class="btn btn-sm btn-outline-danger">Eliminar</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
