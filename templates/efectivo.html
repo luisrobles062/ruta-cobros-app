@@ -1,62 +1,39 @@
-<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8">
-  <title>Efectivo (caja diaria)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
-</head>
-<body>
-  {% include "_navbar.html" %}
-  <div class="container">
-
-    <div class="header">
-      <h1 class="h1">Efectivo</h1>
-      <div class="actions">
-        <span class="badge">Hoy: {{ money(efectivo_hoy) }}</span>
+{% extends 'base.html' %}
+{% block content %}
+<h3>Efectivo diario</h3>
+<div class="row">
+  <div class="col-md-5">
+    <div class="card mb-3">
+      <div class="card-header">Actualizar efectivo</div>
+      <div class="card-body">
+        <form method="post">
+          <div class="mb-2">
+            <label>Monto</label>
+            <input class="form-control" name="monto" placeholder="Ej: 500,00">
+          </div>
+          <div class="mb-2">
+            <label>Fecha</label>
+            <input type="date" class="form-control" name="fecha">
+          </div>
+          <button class="btn btn-primary">Guardar</button>
+        </form>
       </div>
     </div>
-
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="flash {{ category }}">{{ message }}</div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
-
-    <div class="card">
-      <form method="post" class="form">
-        <div class="fields">
-          <div class="field">
-            <label>Monto</label>
-            <input name="monto" placeholder="Ej: 100000">
-          </div>
-          <div class="field">
-            <label>Fecha</label>
-            <input type="date" name="fecha">
-          </div>
-        </div>
-        <button class="btn primary" type="submit">Guardar</button>
-      </form>
-    </div>
-
-    <div class="card" style="margin-top:14px">
-      <h2 class="h1" style="font-size:18px;margin:0 0 8px">Histórico (14 días)</h2>
-      {% if historico and historico|length>0 %}
-        <table class="table">
-          <thead><tr><th>Fecha</th><th>Monto</th></tr></thead>
-          <tbody>
-            {% for f in historico %}
-              <tr><td>{{ f[0] }}</td><td>{{ money(f[1]) }}</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      {% else %}
-        <p class="muted">Sin registros.</p>
-      {% endif %}
-    </div>
-
+    <p>Efectivo HOY: <strong>{{ money(efectivo_hoy) }}</strong></p>
   </div>
-</body>
-</html>
+
+  <div class="col-md-7">
+    <h6>Histórico (últimos 14 días)</h6>
+    <div class="table-responsive">
+    <table class="table table-sm table-striped">
+      <thead><tr><th>Fecha</th><th>Monto</th></tr></thead>
+      <tbody>
+        {% for r in historico %}
+          <tr><td>{{ r[0] }}</td><td>{{ money(r[1]) }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
