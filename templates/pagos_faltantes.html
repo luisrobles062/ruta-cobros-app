@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block content %}
+<h3>Clientes SIN pago en {{ f }}</h3>
+<form method="get" class="mb-3">
+  <label>Fecha:</label>
+  <input type="date" name="fecha" value="{{ f }}">
+  <button class="btn btn-primary btn-sm" type="submit">Filtrar</button>
+</form>
+<p>Total activos: {{ total_activos }} | Faltantes: <strong>{{ faltantes|length }}</strong></p>
+<div class="table-responsive">
+<table class="table table-sm table-striped align-middle">
+  <thead><tr><th>ID</th><th>Nombre</th><th>Deuda actual</th></tr></thead>
+  <tbody>
+    {% for x in faltantes %}
+      <tr><td>{{ x[0] }}</td><td>{{ x[1] }}</td><td>{{ money(x[2]) }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
