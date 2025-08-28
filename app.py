@@ -8,7 +8,8 @@ from decimal import Decimal, InvalidOperation
 from functools import wraps
 
 from flask import (
-    Flask, render_template, request, redirect, url_for, flash, jsonify, session
+    Flask, render_template, render_template_string,
+    request, redirect, url_for, flash, jsonify, session
 )
 import psycopg2
 
@@ -270,6 +271,10 @@ WHERE c.id = p.cliente_id;
 
 -- Backfill de archivado según deuda_actual
 UPDATE clientes SET archivado = (deuda_actual <= 0);
+
+-- (NUEVO) Índice único: un pago por cliente por día
+CREATE UNIQUE INDEX IF NOT EXISTS ux_pagos_cliente_fecha
+ON pagos (cliente_id, fecha_pago);
 """
 
 def init_schema():
@@ -423,7 +428,7 @@ def cliente_eliminar_def(cliente_id):
     finally:
         conn.close()
 
-# -------- Clientes CRUD existente --------
+# -------- Clientes CRUD --------
 @app.route("/clientes/nuevo", methods=["GET", "POST"])
 @login_required
 def cliente_nuevo():
@@ -617,7 +622,7 @@ def pago_nuevo():
 
     if not cliente_id or not monto:
         flash("Cliente y monto son obligatorios.", "warning")
-        return redirect(url_for("pagos_listado"))
+        return redirect(url_for("pagos_listado", cliente_id=cliente_id))
 
     try:
         monto_norm = parse_amount(monto)
@@ -625,23 +630,35 @@ def pago_nuevo():
             raise ValueError
     except Exception:
         flash("Monto inválido.", "warning")
-        return redirect(url_for("pagos_listado"))
+        return redirect(url_for("pagos_listado", cliente_id=cliente_id))
 
     try:
         fecha_pago = date.fromisoformat(fecha_str) if fecha_str else date.today()
     except Exception:
         flash("Fecha de pago inválida (usa AAAA-MM-DD).", "warning")
-        return redirect(url_for("pagos_listado"))
+        return redirect(url_for("pagos_listado", cliente_id=cliente_id))
 
     conn = get_connection()
     try:
         with conn, conn.cursor() as cur:
+            # ❗️VALIDACIÓN: un pago por cliente por día
+            cur.execute("""
+                SELECT 1
+                FROM pagos
+                WHERE cliente_id = %s AND fecha_pago = %s
+                LIMIT 1;
+            """, (int(cliente_id), fecha_pago))
+            ya_pago = cur.fetchone() is not None
+            if ya_pago:
+                flash("ESTE CLIENTE YA PAGO HOY", "warning")
+                return redirect(url_for("pagos_listado", cliente_id=cliente_id))
+
             cur.execute("""
                 INSERT INTO pagos (cliente_id, monto, fecha_pago, metodo, nota)
                 VALUES (%s, %s, %s, %s, %s);
             """, (int(cliente_id), monto_norm, fecha_pago, metodo, nota))
         flash("Pago registrado.", "success")
-        return redirect(url_for("pagos_listado"))
+        return redirect(url_for("pagos_listado", cliente_id=cliente_id))
     finally:
         conn.close()
 
@@ -670,6 +687,7 @@ def pago_editar(pago_id):
 
             return render_template("editar_pago.html", pago=pago, clientes=clientes)
 
+        # POST
         cliente_id = request.form.get("cliente_id")
         monto = request.form.get("monto")
         metodo = (request.form.get("metodo") or "").strip()
@@ -677,18 +695,40 @@ def pago_editar(pago_id):
 
         try:
             monto_norm = parse_amount(monto)
+            if monto_norm <= 0:
+                raise ValueError
         except Exception:
             flash("Monto inválido.", "warning")
             return redirect(url_for("pago_editar", pago_id=pago_id))
 
         with conn, conn.cursor() as cur:
+            # Tomamos la fecha original del pago (no se edita en el form)
+            cur.execute("SELECT fecha_pago FROM pagos WHERE id=%s;", (pago_id,))
+            row = cur.fetchone()
+            if not row:
+                flash("Pago no encontrado.", "warning")
+                return redirect(url_for("pagos_listado"))
+            fecha_pago = row[0]
+
+            # ❗️VALIDACIÓN: evitar duplicado al cambiar cliente
+            cur.execute("""
+                SELECT 1
+                FROM pagos
+                WHERE cliente_id = %s AND fecha_pago = %s AND id <> %s
+                LIMIT 1;
+            """, (int(cliente_id), fecha_pago, pago_id))
+            ya_pago = cur.fetchone() is not None
+            if ya_pago:
+                flash("ESTE CLIENTE YA PAGO HOY", "warning")
+                return redirect(url_for("pagos_listado", cliente_id=cliente_id))
+
             cur.execute("""
                 UPDATE pagos
                 SET cliente_id=%s, monto=%s, metodo=%s, nota=%s
                 WHERE id=%s;
             """, (int(cliente_id), monto_norm, metodo, nota, pago_id))
         flash("Pago actualizado.", "success")
-        return redirect(url_for("pagos_listado"))
+        return redirect(url_for("pagos_listado", cliente_id=cliente_id))
     finally:
         conn.close()
 
@@ -787,7 +827,7 @@ def efectivo():
         historico = cur.fetchall()
     return render_template("efectivo.html", efectivo_hoy=efectivo_hoy, historico=historico)
 
-# -------- Recaudo diario (ya existente) --------
+# -------- Recaudo diario --------
 @app.get("/pagos/diario")
 @login_required
 def pagos_diario():
@@ -807,6 +847,191 @@ def pagos_diario():
         return render_template("pagos_diario.html", filas=filas, money=money)
     finally:
         conn.close()
+
+# -------- NUEVO: Clientes que NO pagaron (inline template) --------
+@app.get("/pagos/faltantes")
+@login_required
+def pagos_faltantes():
+    fecha_str = (request.args.get("fecha") or "").strip()
+    try:
+        f = date.fromisoformat(fecha_str) if fecha_str else date.today()
+    except Exception:
+        flash("Fecha inválida (usa AAAA-MM-DD).", "warning")
+        return redirect(url_for("pagos_faltantes"))
+
+    conn = get_connection()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute("""
+                SELECT c.id, c.nombre, c.deuda_actual
+                FROM clientes c
+                WHERE c.archivado = FALSE
+                  AND NOT EXISTS (
+                    SELECT 1 FROM pagos p
+                    WHERE p.cliente_id = c.id AND p.fecha_pago = %s
+                  )
+                ORDER BY c.nombre ASC;
+            """, (f,))
+            faltantes = cur.fetchall()
+
+            cur.execute("SELECT COUNT(*) FROM clientes WHERE archivado = FALSE;")
+            total_activos = cur.fetchone()[0]
+
+        html = """
+<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Faltantes</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head><body class="bg-light">
+<div class="container mt-3">
+  <div class="d-flex justify-content-between align-items-center">
+    <h3>Clientes SIN pago en {{ f }}</h3>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('pagos_listado') }}">Volver a Pagos</a>
+  </div>
+  <form method="get" class="mb-3">
+    <label class="me-2">Fecha:</label>
+    <input type="date" name="fecha" value="{{ f }}">
+    <button class="btn btn-primary btn-sm ms-2" type="submit">Filtrar</button>
+  </form>
+  <p>Total activos: {{ total_activos }} | Faltantes: <strong>{{ faltantes|length }}</strong></p>
+  <div class="table-responsive">
+    <table class="table table-sm table-striped align-middle">
+      <thead><tr><th>ID</th><th>Nombre</th><th>Deuda actual</th></tr></thead>
+      <tbody>
+      {% for x in faltantes %}
+        <tr><td>{{ x[0] }}</td><td>{{ x[1] }}</td><td>{{ money(x[2]) }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+</body></html>
+"""
+        return render_template_string(
+            html, f=f.isoformat(), faltantes=faltantes,
+            total_activos=total_activos, money=money
+        )
+    finally:
+        conn.close()
+
+# -------- NUEVO: Crecimiento porcentual (inline template) --------
+@app.get("/crecimiento")
+@login_required
+def crecimiento():
+    ini_str = (request.args.get("inicio") or "").strip()
+    fin_str = (request.args.get("fin") or "").strip()
+
+    today = date.today()
+    if not ini_str:
+        ini = today.replace(day=1)
+    else:
+        try:
+            ini = date.fromisoformat(ini_str)
+        except Exception:
+            flash("Fecha de inicio inválida (AAAA-MM-DD).", "warning")
+            return redirect(url_for("crecimiento"))
+
+    if not fin_str:
+        fin = today
+    else:
+        try:
+            fin = date.fromisoformat(fin_str)
+        except Exception:
+            flash("Fecha de fin inválida (AAAA-MM-DD).", "warning")
+            return redirect(url_for("crecimiento"))
+
+    if fin < ini:
+        flash("Fin no puede ser menor que inicio.", "warning")
+        return redirect(url_for("crecimiento", inicio=ini.isoformat(), fin=fin.isoformat()))
+
+    def total_en(fecha_obj):
+        with get_connection() as conn, conn.cursor() as cur:
+            # Deuda total "a la fecha"
+            cur.execute("""
+                WITH pagos_acum AS (
+                  SELECT cliente_id, COALESCE(SUM(monto),0) AS total
+                  FROM pagos
+                  WHERE fecha_pago <= %s
+                  GROUP BY cliente_id
+                )
+                SELECT COALESCE(SUM(GREATEST(0, c.monto_prestado - COALESCE(p.total,0))), 0) AS deuda_as_of
+                FROM clientes c
+                LEFT JOIN pagos_acum p ON p.cliente_id = c.id;
+            """, (fecha_obj,))
+            deuda_as_of = float(cur.fetchone()[0] or 0)
+
+            # Efectivo del día
+            cur.execute("SELECT COALESCE(SUM(monto),0) FROM efectivo_diario WHERE fecha = %s;", (fecha_obj,))
+            efectivo_dia = float(cur.fetchone()[0] or 0)
+
+        return deuda_as_of + efectivo_dia, deuda_as_of, efectivo_dia
+
+    total_ini, deuda_ini, efec_ini = total_en(ini)
+    total_fin, deuda_fin, efec_fin = total_en(fin)
+
+    if total_ini == 0:
+        crecimiento_pct = None
+    else:
+        crecimiento_pct = ((total_fin - total_ini) / total_ini) * 100.0
+
+    html = """
+<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crecimiento</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head><body class="bg-light">
+<div class="container mt-3">
+  <div class="d-flex justify-content-between align-items-center">
+    <h3>Crecimiento porcentual</h3>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('home') }}">Inicio</a>
+  </div>
+
+  <form method="get" class="mb-3">
+    <label>Inicio:</label>
+    <input type="date" name="inicio" value="{{ ini }}">
+    <label class="ms-3">Fin:</label>
+    <input type="date" name="fin" value="{{ fin }}">
+    <button class="btn btn-primary btn-sm ms-2" type="submit">Calcular</button>
+  </form>
+
+  <div class="table-responsive">
+    <table class="table table-sm">
+      <thead><tr><th></th><th>Deuda</th><th>Efectivo del día</th><th>Total (Deuda+Efectivo)</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>{{ ini }}</td>
+          <td>{{ money(deuda_ini) }}</td>
+          <td>{{ money(efec_ini) }}</td>
+          <td>{{ money(total_ini) }}</td>
+        </tr>
+        <tr>
+          <td>{{ fin }}</td>
+          <td>{{ money(deuda_fin) }}</td>
+          <td>{{ money(efec_fin) }}</td>
+          <td>{{ money(total_fin) }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  {% if crecimiento_pct is not none %}
+    <h5>Resultado: {{ '%.2f'|format(crecimiento_pct) }} %</h5>
+  {% else %}
+    <h5>Resultado: N/A (Total de inicio = 0)</h5>
+  {% endif %}
+</div>
+</body></html>
+"""
+    return render_template_string(
+        html,
+        ini=ini.isoformat(), fin=fin.isoformat(),
+        deuda_ini=deuda_ini, efec_ini=efec_ini, total_ini=total_ini,
+        deuda_fin=deuda_fin, efec_fin=efec_fin, total_fin=total_fin,
+        crecimiento_pct=crecimiento_pct,
+        money=money
+    )
 
 # -------- Main --------
 if __name__ == "__main__":
