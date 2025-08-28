@@ -1,35 +1,28 @@
-{% extends "base.html" %}
-{% block title %}Editar pago - Ruta de Cobros{% endblock %}
+{% extends 'base.html' %}
 {% block content %}
-<h1 class="h4 mb-3">Editar pago #{{ pago[0] }}</h1>
-<div class="card border-0 shadow-sm">
-  <div class="card-body">
-    <form method="POST" action="{{ url_for('pago_editar', pago_id=pago[0]) }}">
-      <div class="mb-2">
-        <label class="form-label">Cliente *</label>
-        <select class="form-select" name="cliente_id" required>
-          {% for c in clientes %}
-            <option value="{{ c[0] }}" {% if c[0]==pago[5] %}selected{% endif %}>{{ c[1] }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="mb-2">
-        <label class="form-label">Monto *</label>
-        <input class="form-control" type="number" name="monto" step="0.01" min="0.01" required value="{{ pago[1] }}">
-      </div>
-      <div class="mb-2">
-        <label class="form-label">Método</label>
-        <input class="form-control" type="text" name="metodo" value="{{ pago[3] }}">
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Nota</label>
-        <input class="form-control" type="text" name="nota" value="{{ pago[4] }}">
-      </div>
-      <div class="d-flex gap-2">
-        <a class="btn btn-outline-secondary" href="{{ url_for('pagos_listado') }}">Cancelar</a>
-        <button class="btn btn-primary">Guardar cambios</button>
-      </div>
-    </form>
+<h3>Editar pago #{{ pago[0] }}</h3>
+<form method="post">
+  <div class="mb-3">
+    <label>Cliente</label>
+    <select name="cliente_id" class="form-select" required>
+      {% for c in clientes %}
+        <option value="{{ c[0] }}" {% if c[0]==pago[5] %}selected{% endif %}>{{ c[1] }}</option>
+      {% endfor %}
+    </select>
   </div>
-</div>
+  <div class="mb-3">
+    <label>Monto</label>
+    <input class="form-control" name="monto" value="{{ pago[1] }}" required>
+  </div>
+  <div class="mb-3">
+    <label>Método</label>
+    <input class="form-control" name="metodo" value="{{ pago[3] or '' }}">
+  </div>
+  <div class="mb-3">
+    <label>Nota</label>
+    <input class="form-control" name="nota" value="{{ pago[4] or '' }}">
+  </div>
+  <p><em>La fecha de pago no se edita aquí.</em></p>
+  <button class="btn btn-primary">Guardar cambios</button>
+</form>
 {% endblock %}
