@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block content %}
+<h3>Crecimiento porcentual</h3>
+<form method="get" class="mb-3">
+  <label>Inicio:</label>
+  <input type="date" name="inicio" value="{{ ini }}">
+  <label class="ms-3">Fin:</label>
+  <input type="date" name="fin" value="{{ fin }}">
+  <button class="btn btn-primary btn-sm ms-2" type="submit">Calcular</button>
+</form>
+
+<div class="table-responsive">
+<table class="table table-sm">
+  <thead><tr><th></th><th>Deuda</th><th>Efectivo del día</th><th>Total (Deuda+Efectivo)</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>{{ ini }}</td>
+      <td>{{ money(deuda_ini) }}</td>
+      <td>{{ money(efec_ini) }}</td>
+      <td>{{ money(total_ini) }}</td>
+    </tr>
+    <tr>
+      <td>{{ fin }}</td>
+      <td>{{ money(deuda_fin) }}</td>
+      <td>{{ money(efec_fin) }}</td>
+      <td>{{ money(total_fin) }}</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+{% if crecimiento_pct is not none %}
+  <h5>Resultado: {{ '%.2f'|format(crecimiento_pct) }} %</h5>
+{% else %}
+  <h5>Resultado: N/A (Total de inicio = 0)</h5>
+{% endif %}
+{% endblock %}
