@@ -1,47 +1,18 @@
-<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8">
-  <title>Recaudo por día</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
-</head>
-<body>
-  {% include "_navbar.html" %}
-  <div class="container">
-
-    <div class="header">
-      <h1 class="h1">Recaudo por día (últimos 60)</h1>
-      <div class="actions">
-        <a class="btn" href="{{ url_for('pagos_listado') }}">← Volver a pagos</a>
-      </div>
-    </div>
-
-    <div class="card">
-      {% if filas and filas|length > 0 %}
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th># Pagos</th>
-              <th>Total recaudado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for f in filas %}
-              <tr>
-                <td>{{ f[0] }}</td>
-                <td>{{ f[1] }}</td>
-                <td>{{ money(f[2]) }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      {% else %}
-        <p class="muted">No hay datos de recaudación diaria.</p>
-      {% endif %}
-    </div>
-
-  </div>
-</body>
-</html>
+{% extends 'base.html' %}
+{% block content %}
+<h3>Recaudo diario</h3>
+<div class="table-responsive">
+<table class="table table-sm table-striped">
+  <thead><tr><th>Fecha</th><th># Pagos</th><th>Total</th></tr></thead>
+  <tbody>
+    {% for r in filas %}
+      <tr>
+        <td>{{ r[0] }}</td>
+        <td>{{ r[1] }}</td>
+        <td>{{ money(r[2]) }}</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
