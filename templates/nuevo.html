@@ -1,31 +1,23 @@
-{% extends "base.html" %}
-{% block title %}Nuevo cliente - Ruta de Cobros{% endblock %}
+{% extends 'base.html' %}
 {% block content %}
-<h1 class="h4 mb-3">Nuevo cliente</h1>
-<div class="card border-0 shadow-sm">
-  <div class="card-body">
-    <form method="POST" action="{{ url_for('cliente_nuevo') }}">
-      <div class="mb-3">
-        <label class="form-label">Nombre *</label>
-        <input name="nombre" class="form-control" required>
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Monto prestado *</label>
-        <input name="monto_prestado" class="form-control" type="number" step="0.01" min="0" required>
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Fecha del préstamo</label>
-        <input name="fecha_prestamo" class="form-control" type="date" placeholder="AAAA-MM-DD">
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Observaciones</label>
-        <textarea name="observaciones" class="form-control" rows="2"></textarea>
-      </div>
-      <div class="d-flex gap-2">
-        <a class="btn btn-outline-secondary" href="{{ url_for('home') }}">Cancelar</a>
-        <button class="btn btn-primary">Guardar</button>
-      </div>
-    </form>
+<h3>Nuevo cliente</h3>
+<form method="post">
+  <div class="mb-3">
+    <label class="form-label">Nombre</label>
+    <input class="form-control" name="nombre" required>
   </div>
-</div>
+  <div class="mb-3">
+    <label class="form-label">Monto prestado</label>
+    <input class="form-control" name="monto_prestado" required placeholder="Ej: 1.234,56">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Observaciones</label>
+    <textarea class="form-control" name="observaciones"></textarea>
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Fecha préstamo</label>
+    <input type="date" class="form-control" name="fecha_prestamo">
+  </div>
+  <button class="btn btn-primary">Guardar</button>
+</form>
 {% endblock %}
