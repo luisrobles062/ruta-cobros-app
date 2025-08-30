@@ -6,12 +6,31 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Panel{% endblock %}</title>
 
-  <!-- Tema elegante (Bootswatch: Minty). Cambia "minty" por "lux", "flatly", etc. si quieres -->
+  <!-- Tema elegante (Bootswatch: Minty). Puedes cambiar "minty" por "lux", "flatly", etc. -->
   <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/minty/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons para los chips -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
   <style>
     .navbar-brand { letter-spacing: .5px; }
-    .badge-soft { background: rgba(255,255,255,.2); }
     .container-narrow { max-width: 1100px; }
+
+    /* Chips métricas de alto contraste */
+    .navbar-metrics { gap: .5rem; }
+    .metric-chip {
+      display: inline-flex; align-items: center; gap: .4rem;
+      background: #fff; color: #0b2f26; /* legible en barra oscura */
+      border: 1px solid rgba(0,0,0,.08);
+      border-radius: 999px;
+      padding: .35rem .7rem;
+      font-weight: 600; font-size: .9rem;
+      box-shadow: 0 1px 2px rgba(0,0,0,.06);
+      white-space: nowrap;
+    }
+    .metric-chip i { font-size: 1rem; opacity: .9; }
+    .metric-chip.deuda   { color: var(--bs-danger); }
+    .metric-chip.efectivo{ color: var(--bs-success); }
+    .metric-chip.total   { color: var(--bs-primary); }
   </style>
 </head>
 <body class="bg-light">
@@ -22,6 +41,7 @@
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav" aria-controls="nav" aria-expanded="false" aria-label="Menú">
       <span class="navbar-toggler-icon"></span>
     </button>
+
     <div class="collapse navbar-collapse" id="nav">
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
         <li class="nav-item">
@@ -32,7 +52,7 @@
           <a class="nav-link {% if request.endpoint=='pagos_listado' %}active{% endif %}" href="{{ url_for('pagos_listado') }}">Pagos</a>
         </li>
 
-        <!-- NUEVOS ENLACES -->
+        <!-- Enlaces adicionales que pediste -->
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint=='pagos_diario' %}active{% endif %}" href="{{ url_for('pagos_diario') }}">Recaudo diario</a>
         </li>
@@ -42,7 +62,7 @@
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint=='clientes_archivados' %}active{% endif %}" href="{{ url_for('clientes_archivados') }}">Archivados</a>
         </li>
-        <!-- /NUEVOS ENLACES -->
+        <!-- /Enlaces adicionales -->
 
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint=='gastos' %}active{% endif %}" href="{{ url_for('gastos') }}">Gastos</a>
@@ -55,11 +75,20 @@
         </li>
       </ul>
 
-      <!-- Totales rápidos (inyectados por @app.context_processor) -->
-      <div class="d-none d-lg-flex align-items-center gap-2 me-3">
-        <span class="badge rounded-pill badge-soft">Deuda: <strong>{{ money(deuda_total) }}</strong></span>
-        <span class="badge rounded-pill badge-soft">Efectivo hoy: <strong>{{ money(efectivo_hoy) }}</strong></span>
-        <span class="badge rounded-pill badge-soft">Total: <strong>{{ money(total_general) }}</strong></span>
+      <!-- Chips de métricas con alto contraste -->
+      <div class="navbar-metrics d-none d-lg-inline-flex me-3">
+        <span class="metric-chip deuda">
+          <i class="bi bi-exclamation-octagon"></i>
+          Deuda: <strong>{{ money(deuda_total) }}</strong>
+        </span>
+        <span class="metric-chip efectivo">
+          <i class="bi bi-cash-coin"></i>
+          Efectivo hoy: <strong>{{ money(efectivo_hoy) }}</strong>
+        </span>
+        <span class="metric-chip total">
+          <i class="bi bi-calculator"></i>
+          Total: <strong>{{ money(total_general) }}</strong>
+        </span>
       </div>
 
       <div>
