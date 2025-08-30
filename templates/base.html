@@ -27,9 +27,23 @@
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint=='home' %}active{% endif %}" href="{{ url_for('home') }}">Inicio</a>
         </li>
+
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint=='pagos_listado' %}active{% endif %}" href="{{ url_for('pagos_listado') }}">Pagos</a>
         </li>
+
+        <!-- NUEVOS ENLACES -->
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint=='pagos_diario' %}active{% endif %}" href="{{ url_for('pagos_diario') }}">Recaudo diario</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint=='pagos_faltantes' %}active{% endif %}" href="{{ url_for('pagos_faltantes') }}">Faltantes</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint=='clientes_archivados' %}active{% endif %}" href="{{ url_for('clientes_archivados') }}">Archivados</a>
+        </li>
+        <!-- /NUEVOS ENLACES -->
+
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint=='gastos' %}active{% endif %}" href="{{ url_for('gastos') }}">Gastos</a>
         </li>
