@@ -947,11 +947,22 @@ def pagos_faltantes():
     finally:
         conn.close()
 
-# ======================= NUEVO: Gastos =======================
+# ======================= NUEVO: Gastos (robusto) =======================
 @app.route("/gastos", methods=["GET", "POST"])
 @login_required
 def gastos():
-    # POST: crear gasto
+    def ensure_table(conn):
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS gastos (
+                  id SERIAL PRIMARY KEY,
+                  concepto TEXT NOT NULL,
+                  monto NUMERIC(14,2) NOT NULL CHECK (monto >= 0),
+                  fecha DATE NOT NULL DEFAULT CURRENT_DATE,
+                  nota TEXT
+                );
+            """)
+
     if request.method == "POST":
         concepto = (request.form.get("concepto") or "").strip()
         monto_raw = (request.form.get("monto") or "").strip()
@@ -962,7 +973,6 @@ def gastos():
             flash("Concepto y monto son obligatorios.", "warning")
             return redirect(url_for("gastos"))
 
-        # Normalizamos monto con Decimal pero aceptando formatos flexibles
         try:
             normalizado = _parse_amount_relajado(monto_raw) or monto_raw
             monto = Decimal(normalizado)
@@ -973,22 +983,25 @@ def gastos():
             flash("Monto inválido.", "warning")
             return redirect(url_for("gastos"))
 
-        # Fecha
         try:
             f = date.fromisoformat(fecha_str) if fecha_str else today_local()
         except Exception:
             flash("Fecha inválida (usa AAAA-MM-DD).", "warning")
             return redirect(url_for("gastos"))
 
-        with get_connection() as conn, conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO gastos (concepto, monto, fecha, nota)
-                VALUES (%s, %s, %s, %s);
-            """, (concepto, monto, f, nota))
+        with get_connection() as conn:
+            ensure_table(conn)
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO gastos (concepto, monto, fecha, nota)
+                    VALUES (%s, %s, %s, %s);
+                """, (concepto, monto, f, nota))
+            conn.commit()
+
         flash("Gasto registrado.", "success")
         return redirect(url_for("gastos"))
 
-    # GET: filtro opcional por fecha
+    # GET
     desde_str = (request.args.get("desde") or "").strip()
     hasta_str = (request.args.get("hasta") or "").strip()
 
@@ -1018,17 +1031,18 @@ def gastos():
         {'WHERE ' + ' AND '.join(where) if where else ''};
     """
 
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(sql_list, tuple(params))
-        filas = cur.fetchall()
+    with get_connection() as conn:
+        ensure_table(conn)
+        with conn.cursor() as cur:
+            cur.execute(sql_list, tuple(params))
+            filas = cur.fetchall()
 
-        cur.execute(sql_sum, tuple(params))
-        total_filtro = float(cur.fetchone()[0] or 0)
+            cur.execute(sql_sum, tuple(params))
+            total_filtro = float(cur.fetchone()[0] or 0)
 
-        # Total del mes actual (rápido)
-        ini_mes = today_local().replace(day=1)
-        cur.execute("SELECT COALESCE(SUM(monto),0) FROM gastos WHERE fecha >= %s;", (ini_mes,))
-        total_mes = float(cur.fetchone()[0] or 0)
+            ini_mes = today_local().replace(day=1)
+            cur.execute("SELECT COALESCE(SUM(monto),0) FROM gastos WHERE fecha >= %s;", (ini_mes,))
+            total_mes = float(cur.fetchone()[0] or 0)
 
     return render_template(
         "gastos.html",
@@ -1043,8 +1057,10 @@ def gastos():
 @app.post("/gastos/<int:gasto_id>/eliminar")
 @login_required
 def gasto_eliminar(gasto_id):
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute("DELETE FROM gastos WHERE id=%s;", (gasto_id,))
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM gastos WHERE id=%s;", (gasto_id,))
+        conn.commit()
     flash("Gasto eliminado.", "success")
     return redirect(url_for("gastos"))
 
