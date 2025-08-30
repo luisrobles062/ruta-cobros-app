@@ -1,0 +1,80 @@
+<!-- templates/crecimiento_mensual.html -->
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Crecimiento mes a mes</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/minty/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-3">
+  <div class="container-fluid">
+    <a class="navbar-brand fw-bold" href="{{ url_for('home') }}">Cobros</a>
+    <div class="collapse navbar-collapse">
+      <ul class="navbar-nav me-auto">
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('home') }}">Inicio</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('pagos_listado') }}">Pagos</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('gastos') }}">Gastos</a></li>
+        <li class="nav-item"><a class="nav-link active" href="{{ url_for('crecimiento') }}">Crecimiento</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('efectivo') }}">Efectivo</a></li>
+      </ul>
+      <a class="btn btn-outline-light btn-sm" href="{{ url_for('logout') }}">Salir</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container mt-3">
+  <div class="card shadow-sm border-0">
+    <div class="card-body">
+      <form method="get" class="row g-2">
+        <input type="hidden" name="modo" value="mensual">
+        <div class="col-auto">
+          <label class="form-label mb-0">Inicio</label>
+          <input type="date" name="inicio" value="{{ ini }}" class="form-control">
+        </div>
+        <div class="col-auto">
+          <label class="form-label mb-0">Fin</label>
+          <input type="date" name="fin" value="{{ fin }}" class="form-control">
+        </div>
+        <div class="col-auto align-self-end">
+          <button class="btn btn-primary" type="submit">Calcular</button>
+        </div>
+      </form>
+
+      <div class="table-responsive mt-3">
+        <table class="table table-sm table-striped align-middle">
+          <thead>
+            <tr>
+              <th>Snapshot</th>
+              <th>Total</th>
+              <th>Δ abs.</th>
+              <th>Δ %</th>
+              <th>Deuda</th>
+              <th>Efectivo del día</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in serie %}
+            <tr>
+              <td>{{ r.fecha }}</td>
+              <td>{{ money(r.total) }}</td>
+              <td>{% if r.delta_abs is not none %}{{ money(r.delta_abs) }}{% else %}—{% endif %}</td>
+              <td>{% if r.delta_pct is not none %}{{ '%.2f'|format(r.delta_pct) }} %{% else %}—{% endif %}</td>
+              <td>{{ money(r.deuda) }}</td>
+              <td>{{ money(r.efectivo) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mt-3">
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('crecimiento', inicio=ini, fin=fin, modo='ultimo') }}">Fin vs día anterior</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('crecimiento', inicio=ini, fin=fin, modo='rango') }}">Fin vs inicio del rango</a>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
