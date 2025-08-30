@@ -1,130 +1,107 @@
 <!-- templates/gastos.html -->
-<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Gastos</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/minty/bootstrap.min.css" rel="stylesheet">
-</head>
-<body class="bg-light">
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-3">
-  <div class="container-fluid">
-    <a class="navbar-brand fw-bold" href="{{ url_for('home') }}">Cobros</a>
-    <div class="collapse navbar-collapse">
-      <ul class="navbar-nav me-auto">
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('home') }}">Inicio</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('pagos_listado') }}">Pagos</a></li>
-        <li class="nav-item"><a class="nav-link active" href="{{ url_for('gastos') }}">Gastos</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('crecimiento') }}">Crecimiento</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('efectivo') }}">Efectivo</a></li>
-      </ul>
-      <a class="btn btn-outline-light btn-sm" href="{{ url_for('logout') }}">Salir</a>
-    </div>
-  </div>
-</nav>
+{% extends "base.html" %}
+{% block title %}Gastos{% endblock %}
+{% block content %}
 
-<div class="container">
-  <div class="row g-3">
-    <div class="col-12 col-lg-4">
-      <div class="card shadow-sm">
-        <div class="card-body">
-          <h5 class="card-title mb-3">Registrar gasto</h5>
-          <form method="post">
-            <div class="mb-2">
-              <label class="form-label">Concepto</label>
-              <input name="concepto" class="form-control" placeholder="Ej: Gasolina" required>
-            </div>
-            <div class="mb-2">
-              <label class="form-label">Monto</label>
-              <input name="monto" class="form-control" placeholder="Ej: 5,000" required>
-            </div>
-            <div class="mb-2">
-              <label class="form-label">Fecha</label>
-              <input type="date" name="fecha" class="form-control" value="{{ today }}">
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Nota (opcional)</label>
-              <input name="nota" class="form-control" placeholder="Detalle breve">
-            </div>
-            <button class="btn btn-primary w-100" type="submit">Guardar</button>
-          </form>
-        </div>
+<div class="row g-3">
+  <div class="col-12 col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="card-title mb-3">Registrar gasto</h5>
+        <form method="post">
+          <div class="mb-2">
+            <label class="form-label">Concepto</label>
+            <input name="concepto" class="form-control" placeholder="Ej: Gasolina" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Monto</label>
+            <input name="monto" class="form-control" placeholder="Ej: 5000" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Fecha</label>
+            <input type="date" name="fecha" class="form-control" value="{{ today }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Nota (opcional)</label>
+            <input name="nota" class="form-control" placeholder="Detalle breve">
+          </div>
+          <button class="btn btn-primary w-100" type="submit">Guardar</button>
+        </form>
       </div>
+    </div>
 
-      <div class="row mt-3 g-3">
-        <div class="col-12">
-          <div class="card border-0 shadow-sm">
-            <div class="card-body">
-              <div class="d-flex justify-content-between">
-                <div>
-                  <div class="text-muted">Total mes</div>
-                  <div class="h5 mb-0">{{ money(total_mes) }}</div>
-                </div>
-                <div class="text-end">
-                  <div class="text-muted">Total filtro</div>
-                  <div class="h5 mb-0">{{ money(total_filtro) }}</div>
-                </div>
+    <div class="row mt-3 g-3">
+      <div class="col-12">
+        <div class="card border-0 shadow-sm">
+          <div class="card-body">
+            <div class="d-flex justify-content-between">
+              <div>
+                <div class="text-muted">Total mes</div>
+                <div class="h5 mb-0">{{ money(total_mes) }}</div>
               </div>
-              <form method="get" class="row g-2 mt-3">
-                <div class="col">
-                  <label class="form-label">Desde</label>
-                  <input type="date" name="desde" value="{{ desde }}" class="form-control">
-                </div>
-                <div class="col">
-                  <label class="form-label">Hasta</label>
-                  <input type="date" name="hasta" value="{{ hasta }}" class="form-control">
-                </div>
-                <div class="col-auto align-self-end">
-                  <button class="btn btn-outline-primary" type="submit">Filtrar</button>
-                </div>
-                {% if desde or hasta %}
-                <div class="col-auto align-self-end">
-                  <a class="btn btn-outline-secondary" href="{{ url_for('gastos') }}">Limpiar</a>
-                </div>
-                {% endif %}
-              </form>
+              <div class="text-end">
+                <div class="text-muted">Total filtro</div>
+                <div class="h5 mb-0">{{ money(total_filtro) }}</div>
+              </div>
             </div>
-          </div>
-        </div>
-      </div>
-
-    </div>
-
-    <div class="col-12 col-lg-8">
-      <div class="card shadow-sm">
-        <div class="card-body">
-          <h5 class="card-title">Historial de gastos</h5>
-          <div class="table-responsive">
-            <table class="table table-sm table-striped align-middle">
-              <thead><tr>
-                <th>Fecha</th><th>Concepto</th><th class="text-end">Monto</th><th>Nota</th><th></th>
-              </tr></thead>
-              <tbody>
-              {% for g in filas %}
-                <tr>
-                  <td>{{ g[1] }}</td>
-                  <td>{{ g[2] }}</td>
-                  <td class="text-end">{{ money(g[3]) }}</td>
-                  <td>{{ g[4] }}</td>
-                  <td class="text-end">
-                    <form method="post" action="{{ url_for('gasto_eliminar', gasto_id=g[0]) }}" onsubmit="return confirm('¿Eliminar gasto?');">
-                      <button class="btn btn-sm btn-outline-danger">Eliminar</button>
-                    </form>
-                  </td>
-                </tr>
-              {% endfor %}
-              {% if not filas %}
-                <tr><td colspan="5" class="text-center text-muted py-4">Sin gastos aún.</td></tr>
+            <form method="get" class="row g-2 mt-3">
+              <div class="col">
+                <label class="form-label">Desde</label>
+                <input type="date" name="desde" value="{{ desde }}" class="form-control">
+              </div>
+              <div class="col">
+                <label class="form-label">Hasta</label>
+                <input type="date" name="hasta" value="{{ hasta }}" class="form-control">
+              </div>
+              <div class="col-auto align-self-end">
+                <button class="btn btn-outline-primary" type="submit">Filtrar</button>
+              </div>
+              {% if desde or hasta %}
+              <div class="col-auto align-self-end">
+                <a class="btn btn-outline-secondary" href="{{ url_for('gastos') }}">Limpiar</a>
+              </div>
               {% endif %}
-              </tbody>
-            </table>
+            </form>
           </div>
         </div>
       </div>
     </div>
 
   </div>
+
+  <div class="col-12 col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="card-title">Historial de gastos</h5>
+        <div class="table-responsive">
+          <table class="table table-sm table-striped align-middle">
+            <thead><tr>
+              <th>Fecha</th><th>Concepto</th><th class="text-end">Monto</th><th>Nota</th><th></th>
+            </tr></thead>
+            <tbody>
+            {% for g in filas %}
+              <tr>
+                <td>{{ g[1] }}</td>
+                <td>{{ g[2] }}</td>
+                <td class="text-end">{{ money(g[3]) }}</td>
+                <td>{{ g[4] }}</td>
+                <td class="text-end">
+                  <form method="post" action="{{ url_for('gasto_eliminar', gasto_id=g[0]) }}" onsubmit="return confirm('¿Eliminar gasto?');">
+                    <button class="btn btn-sm btn-outline-danger">Eliminar</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+            {% if not filas %}
+              <tr><td colspan="5" class="text-center text-muted py-4">Sin gastos aún.</td></tr>
+            {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
-</body>
-</html>
+
+{% endblock %}
