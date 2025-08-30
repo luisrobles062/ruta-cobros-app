@@ -294,6 +294,16 @@ UPDATE clientes SET archivado = (deuda_actual <= 0);
 -- (NUEVO) Índice único: un pago por cliente por día
 CREATE UNIQUE INDEX IF NOT EXISTS ux_pagos_cliente_fecha
 ON pagos (cliente_id, fecha_pago);
+
+-- 9) Gastos operativos (independientes de cobros)
+CREATE TABLE IF NOT EXISTS gastos (
+  id SERIAL PRIMARY KEY,
+  concepto TEXT NOT NULL,
+  monto NUMERIC(14,2) NOT NULL CHECK (monto >= 0),
+  fecha DATE NOT NULL DEFAULT CURRENT_DATE,
+  nota TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos(fecha);
 """
 
 def init_schema():
@@ -937,7 +947,108 @@ def pagos_faltantes():
     finally:
         conn.close()
 
-# -------- NUEVO: Crecimiento porcentual (diario, rango y mes a mes) --------
+# ======================= NUEVO: Gastos =======================
+@app.route("/gastos", methods=["GET", "POST"])
+@login_required
+def gastos():
+    # POST: crear gasto
+    if request.method == "POST":
+        concepto = (request.form.get("concepto") or "").strip()
+        monto_raw = (request.form.get("monto") or "").strip()
+        fecha_str = (request.form.get("fecha") or "").strip()
+        nota = (request.form.get("nota") or "").strip()
+
+        if not concepto or not monto_raw:
+            flash("Concepto y monto son obligatorios.", "warning")
+            return redirect(url_for("gastos"))
+
+        # Normalizamos monto con Decimal pero aceptando formatos flexibles
+        try:
+            normalizado = _parse_amount_relajado(monto_raw) or monto_raw
+            monto = Decimal(normalizado)
+            if monto < 0:
+                raise InvalidOperation
+            monto = monto.quantize(Decimal("0.01"))
+        except Exception:
+            flash("Monto inválido.", "warning")
+            return redirect(url_for("gastos"))
+
+        # Fecha
+        try:
+            f = date.fromisoformat(fecha_str) if fecha_str else today_local()
+        except Exception:
+            flash("Fecha inválida (usa AAAA-MM-DD).", "warning")
+            return redirect(url_for("gastos"))
+
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO gastos (concepto, monto, fecha, nota)
+                VALUES (%s, %s, %s, %s);
+            """, (concepto, monto, f, nota))
+        flash("Gasto registrado.", "success")
+        return redirect(url_for("gastos"))
+
+    # GET: filtro opcional por fecha
+    desde_str = (request.args.get("desde") or "").strip()
+    hasta_str = (request.args.get("hasta") or "").strip()
+
+    where = []
+    params = []
+    if desde_str:
+        try:
+            d = date.fromisoformat(desde_str); where.append("fecha >= %s"); params.append(d)
+        except Exception:
+            pass
+    if hasta_str:
+        try:
+            h = date.fromisoformat(hasta_str); where.append("fecha <= %s"); params.append(h)
+        except Exception:
+            pass
+
+    sql_list = f"""
+        SELECT id, fecha, concepto, monto, COALESCE(nota,'')
+        FROM gastos
+        {'WHERE ' + ' AND '.join(where) if where else ''}
+        ORDER BY fecha DESC, id DESC
+        LIMIT 200;
+    """
+    sql_sum = f"""
+        SELECT COALESCE(SUM(monto),0)
+        FROM gastos
+        {'WHERE ' + ' AND '.join(where) if where else ''};
+    """
+
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(sql_list, tuple(params))
+        filas = cur.fetchall()
+
+        cur.execute(sql_sum, tuple(params))
+        total_filtro = float(cur.fetchone()[0] or 0)
+
+        # Total del mes actual (rápido)
+        ini_mes = today_local().replace(day=1)
+        cur.execute("SELECT COALESCE(SUM(monto),0) FROM gastos WHERE fecha >= %s;", (ini_mes,))
+        total_mes = float(cur.fetchone()[0] or 0)
+
+    return render_template(
+        "gastos.html",
+        filas=filas,
+        total_mes=total_mes,
+        total_filtro=total_filtro,
+        desde=desde_str, hasta=hasta_str,
+        today=today_local().isoformat(),
+        money=money
+    )
+
+@app.post("/gastos/<int:gasto_id>/eliminar")
+@login_required
+def gasto_eliminar(gasto_id):
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM gastos WHERE id=%s;", (gasto_id,))
+    flash("Gasto eliminado.", "success")
+    return redirect(url_for("gastos"))
+
+# ======================= NUEVO: Crecimiento mejorado =======================
 @app.get("/crecimiento")
 @login_required
 def crecimiento():
@@ -945,10 +1056,7 @@ def crecimiento():
     modos:
       - 'ultimo' (default): Total(fin) vs Total(fin-1 día)
       - 'rango'           : Total(fin) vs Total(inicio)
-      - 'mensual'         : Serie mes a mes dentro del rango (MoM real),
-                            usando snapshots de fin de mes (o fin del rango).
-    'Datos reales': el cálculo usa SOLO clientes con fecha_prestamo <= snapshot
-    y pagos hasta el snapshot, + efectivo del día exacto del snapshot.
+      - 'mensual'         : Serie mes a mes (MoM) con snapshots reales
     """
     ini_str = (request.args.get("inicio") or "").strip()
     fin_str = (request.args.get("fin") or "").strip()
@@ -978,10 +1086,7 @@ def crecimiento():
         return redirect(url_for("crecimiento", inicio=ini.isoformat(), fin=fin.isoformat(), modo=modo))
 
     def total_en(fecha_obj: date):
-        """Devuelve (total_general, deuda_as_of, efectivo_en_fecha) para la fecha dada.
-           SOLO cuenta clientes creados hasta esa fecha (fecha_prestamo <= fecha_obj)."""
         with get_connection() as conn, conn.cursor() as cur:
-            # Deuda total "a la fecha" con clientes existentes a esa fecha
             cur.execute("""
                 WITH pagos_acum AS (
                   SELECT cliente_id, COALESCE(SUM(monto),0) AS total
@@ -996,13 +1101,12 @@ def crecimiento():
             """, (fecha_obj, fecha_obj))
             deuda_as_of = float(cur.fetchone()[0] or 0)
 
-            # Efectivo del día exacto
             cur.execute("SELECT COALESCE(SUM(monto),0) FROM efectivo_diario WHERE fecha = %s;", (fecha_obj,))
             efectivo_dia = float(cur.fetchone()[0] or 0)
 
         return deuda_as_of + efectivo_dia, deuda_as_of, efectivo_dia
 
-    # ========== modos 'ultimo' y 'rango' ==========
+    # ===== modos 'ultimo' y 'rango' =====
     if modo in ("ultimo", "rango"):
         if modo == "rango":
             base_fecha = ini
@@ -1014,209 +1118,50 @@ def crecimiento():
         total_base, deuda_base, efec_base = total_en(base_fecha)
         total_comp, deuda_comp, efec_comp = total_en(comp_fecha)
 
+        delta_abs = total_comp - total_base
         crecimiento_pct = None if total_base == 0 else ((total_comp - total_base) / total_base) * 100.0
 
-        html = """
-<!doctype html>
-<html lang="es"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Crecimiento</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-</head><body class="bg-light">
-<div class="container mt-3">
-  <div class="d-flex justify-content-between align-items-center">
-    <h3>Crecimiento porcentual</h3>
-    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('home') }}">Inicio</a>
-  </div>
-
-  <form method="get" class="row g-2 mb-3">
-    <div class="col-auto">
-      <label class="form-label mb-0">Inicio</label>
-      <input type="date" name="inicio" value="{{ ini }}" class="form-control">
-    </div>
-    <div class="col-auto">
-      <label class="form-label mb-0">Fin</label>
-      <input type="date" name="fin" value="{{ fin }}" class="form-control">
-    </div>
-    <div class="col-auto">
-      <label class="form-label mb-0">Modo</label>
-      <select name="modo" class="form-select">
-        <option value="ultimo" {% if modo=='ultimo' %}selected{% endif %}>Fin vs día anterior</option>
-        <option value="rango" {% if modo=='rango' %}selected{% endif %}>Fin vs inicio del rango</option>
-        <option value="mensual" {% if modo=='mensual' %}selected{% endif %}>Mes a mes (MoM)</option>
-      </select>
-    </div>
-    <div class="col-auto align-self-end">
-      <button class="btn btn-primary" type="submit">Calcular</button>
-    </div>
-  </form>
-
-  <div class="table-responsive">
-    <table class="table table-sm">
-      <thead><tr>
-        <th>Fecha</th><th>Deuda</th><th>Efectivo del día</th><th>Total (Deuda+Efectivo)</th>
-      </tr></thead>
-      <tbody>
-        <tr>
-          <td>{{ base_fecha }}</td>
-          <td>{{ money(deuda_base) }}</td>
-          <td>{{ money(efec_base) }}</td>
-          <td>{{ money(total_base) }}</td>
-        </tr>
-        <tr>
-          <td>{{ comp_fecha }}</td>
-          <td>{{ money(deuda_comp) }}</td>
-          <td>{{ money(efec_comp) }}</td>
-          <td>{{ money(total_comp) }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  {% if crecimiento_pct is not none %}
-    <h5 class="mt-2">Resultado: {{ '%.2f'|format(crecimiento_pct) }} %</h5>
-  {% else %}
-    <div class="alert alert-warning mt-2">
-      No se puede calcular el porcentaje porque el total base es 0.
-    </div>
-  {% endif %}
-
-  <p class="text-muted mt-2">
-    Modo: <strong>{{ 'Fin vs día anterior' if modo=='ultimo' else 'Fin vs inicio del rango' }}</strong>.
-  </p>
-</div>
-</body></html>
-"""
-        return render_template_string(
-            html,
+        return render_template(
+            "crecimiento.html",
             ini=ini.isoformat(), fin=fin.isoformat(),
             modo=modo,
             base_fecha=base_fecha.isoformat(), comp_fecha=comp_fecha.isoformat(),
             deuda_base=deuda_base, efec_base=efec_base, total_base=total_base,
             deuda_comp=deuda_comp, efec_comp=efec_comp, total_comp=total_comp,
-            crecimiento_pct=crecimiento_pct,
+            delta_abs=delta_abs, crecimiento_pct=crecimiento_pct,
             money=money
         )
 
-    # ========== modo 'mensual' (MoM real) ==========
-    # Generar snapshots al fin de cada mes dentro del rango [ini, fin]
-    # - Para el primer mes: snapshot = min(fin_de_mes(ini), fin)
-    # - Para meses intermedios: fin_de_mes(mes)
-    # - Para el último mes (si fin no es fin de mes): snapshot = fin
+    # ===== modo 'mensual' (MoM real) =====
     snaps = []
     cursor = ini.replace(day=1)
-    fin_eom = end_of_month(fin)
     while cursor <= fin:
         snap = end_of_month(cursor)
         if snap > fin:
             snap = fin
         if snap >= ini:
             snaps.append(snap)
-        # siguiente mes
         if cursor.month == 12:
             cursor = date(cursor.year + 1, 1, 1)
         else:
             cursor = date(cursor.year, cursor.month + 1, 1)
 
-    # Calcular serie
     serie = []
     for s in snaps:
         tot, deu, ef = total_en(s)
-        serie.append({
-            "fecha": s,
-            "total": tot,
-            "deuda": deu,
-            "efectivo": ef
-        })
+        serie.append({"fecha": s, "total": tot, "deuda": deu, "efectivo": ef})
 
-    # Calcular variaciones MoM
     for i in range(len(serie)):
         if i == 0:
             serie[i]["delta_abs"] = None
             serie[i]["delta_pct"] = None
         else:
-            prev = serie[i-1]["total"]
-            cur = serie[i]["total"]
+            prev = serie[i-1]["total"]; cur = serie[i]["total"]
             serie[i]["delta_abs"] = cur - prev
             serie[i]["delta_pct"] = (None if prev == 0 else ((cur - prev) / prev) * 100.0)
 
-    html_mensual = """
-<!doctype html>
-<html lang="es"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Crecimiento mes a mes</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-</head><body class="bg-light">
-<div class="container mt-3">
-  <div class="d-flex justify-content-between align-items-center">
-    <h3>Crecimiento mes a mes (MoM)</h3>
-    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('home') }}">Inicio</a>
-  </div>
-
-  <form method="get" class="row g-2 mb-3">
-    <input type="hidden" name="modo" value="mensual">
-    <div class="col-auto">
-      <label class="form-label mb-0">Inicio</label>
-      <input type="date" name="inicio" value="{{ ini }}" class="form-control">
-    </div>
-    <div class="col-auto">
-      <label class="form-label mb-0">Fin</label>
-      <input type="date" name="fin" value="{{ fin }}" class="form-control">
-    </div>
-    <div class="col-auto align-self-end">
-      <button class="btn btn-primary" type="submit">Calcular</button>
-    </div>
-  </form>
-
-  <div class="table-responsive">
-  <table class="table table-sm table-striped align-middle">
-    <thead>
-      <tr>
-        <th>Snapshot (fin de mes / fin del rango)</th>
-        <th>Total</th>
-        <th>Δ abs.</th>
-        <th>Δ %</th>
-        <th>Deuda</th>
-        <th>Efectivo del día</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for r in serie %}
-      <tr>
-        <td>{{ r.fecha }}</td>
-        <td>{{ money(r.total) }}</td>
-        <td>
-          {% if r.delta_abs is not none %}
-            {{ money(r.delta_abs) }}
-          {% else %}—{% endif %}
-        </td>
-        <td>
-          {% if r.delta_pct is not none %}
-            {{ '%.2f'|format(r.delta_pct) }} %
-          {% else %}—{% endif %}
-        </td>
-        <td>{{ money(r.deuda) }}</td>
-        <td>{{ money(r.efectivo) }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  </div>
-
-  <p class="text-muted">
-    Cada fila es un <em>snapshot real</em> del cierre del mes (o del fin del rango si cae a mitad de mes).
-    Solo se consideran clientes con <code>fecha_prestamo ≤ snapshot</code> y pagos hasta esa fecha; el efectivo es el del día exacto del snapshot.
-  </p>
-
-  <div class="mt-3">
-    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('crecimiento', inicio=ini, fin=fin, modo='ultimo') }}">Fin vs día anterior</a>
-    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('crecimiento', inicio=ini, fin=fin, modo='rango') }}">Fin vs inicio del rango</a>
-  </div>
-</div>
-</body></html>
-"""
-    return render_template_string(
-        html_mensual,
+    return render_template(
+        "crecimiento_mensual.html",
         ini=ini.isoformat(), fin=fin.isoformat(),
         serie=serie, money=money
     )
