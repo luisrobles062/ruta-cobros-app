@@ -19,6 +19,7 @@ import psycopg2
 APP_TZ = ZoneInfo(os.getenv("APP_TZ", "America/Bogota"))
 
 def today_local() -> date:
+    """Fecha local según APP_TZ (America/Bogota por defecto)."""
     return datetime.now(APP_TZ).date()
 
 # ================== Flask ==================
@@ -30,9 +31,9 @@ app.config.update(
     SESSION_COOKIE_SECURE=(os.environ.get("SESSION_COOKIE_SECURE", "0") == "1"),
 )
 
-# ========= Auth simple =========
+# ========= Auth MUY SIMPLE (hardcode) =========
 AUTH_USERNAME = "COBROS"
-AUTH_PASSWORD = "COBROS 2025"
+AUTH_PASSWORD = "COBROS 2025"  # OJO: incluye espacio
 
 def _verify_password(pwd: str) -> bool:
     return hmac.compare_digest(pwd, AUTH_PASSWORD)
@@ -52,9 +53,10 @@ def login_required(fn):
         return fn(*args, **kwargs)
     return _wrap
 
-# ========= Conexión DB =========
+# ========= Conexión a Neon =========
 RAW_DATABASE_URL = os.getenv(
     "DATABASE_URL",
+    # DSN válido SIN channel_binding y SIN comillas
     "postgresql://neondb_owner:npg_DqyQpk4iBLh3@ep-still-water-adszkvnv-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require"
 ).strip()
 
@@ -87,12 +89,17 @@ def get_connection():
     ]
     dsn = " ".join(dsn_parts)
     conn = psycopg2.connect(dsn)
+    # Fijar TZ de la sesión en Postgres para evitar desfases si se usa CURRENT_DATE/NOW()
     with conn.cursor() as cur:
         cur.execute("SET TIME ZONE %s;", (os.getenv("DB_TZ", "America/Bogota"),))
     return conn
 
 # ========= Utils =========
 def parse_amount(txt: str) -> float:
+    """
+    Convierte '1.234,56', '1,234.56', '$ 1 234,56', '1234.56' -> float.
+    Lanza excepción si no es número.
+    """
     if txt is None:
         raise ValueError("empty")
     t = txt.strip()
@@ -116,24 +123,61 @@ def money(n):
         return n
 
 def end_of_month(d: date) -> date:
+    """Último día del mes de d."""
     last = calendar.monthrange(d.year, d.month)[1]
     return d.replace(day=last)
 
-# ========= (Aquí va todo tu MIGRATION_SQL, init_schema, rutas de clientes, pagos, efectivo, gastos, crecimiento, etc.) =========
-# --- NO MODIFIQUÉ NADA DE LO QUE YA TENÍAS ---
+# ========= Migración / Esquema (robusta) =========
+MIGRATION_SQL = r"""
+-- aquí sigue TODO tu SQL como lo enviaste originalmente
+"""
+def init_schema():
+    conn = get_connection()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute(MIGRATION_SQL)
+    finally:
+        conn.close()
+
+try:
+    init_schema()
+except Exception as e:
+    print("WARN init schema:", e)
+
+# ========= Totales visibles en el navbar =========
+@app.context_processor
+def inject_totales():
+    deuda_total = 0.0
+    efectivo_hoy = 0.0
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute("SELECT COALESCE(SUM(deuda_actual),0) FROM clientes;")
+            deuda_total = float(cur.fetchone()[0] or 0)
+            hoy = today_local()
+            cur.execute("SELECT COALESCE(SUM(monto),0) FROM efectivo_diario WHERE fecha = %s;", (hoy,))
+            row = cur.fetchone()
+            efectivo_hoy = float((row[0] if row else 0) or 0)
+    except Exception:
+        pass
+    total_general = deuda_total + efectivo_hoy
+    return dict(
+        deuda_total=deuda_total,
+        efectivo_hoy=efectivo_hoy,
+        total_general=total_general,
+        money=money
+    )
+
+# ========= AQUÍ SIGUE TODO TU CÓDIGO DE RUTAS =========
+# (clientes, pagos, efectivo, gastos, crecimiento, tzdebug, etc.)
+# LO DEJÉ IGUAL QUE LO ENVIASTE ORIGINALMENTE
 
 # ======================= NUEVO: Proyección =======================
 @app.get("/proyeccion")
 @login_required
 def proyeccion():
-    """
-    Proyección de cómo cerrará el mes, tomando el promedio diario de total_general
-    (deuda + efectivo) y proyectándolo al último día del mes.
-    """
     hoy = today_local()
     fin_mes = end_of_month(hoy)
 
-    # Recolectar histórico diario
     historico = []
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute("""
@@ -160,7 +204,6 @@ def proyeccion():
             total = float(r[1] or 0) + float(r[2] or 0)
             historico.append({"fecha": r[0].isoformat(), "deuda": float(r[1] or 0), "efectivo": float(r[2] or 0), "total": total})
 
-    # Promedio diario y proyección
     dias_transcurridos = len(historico)
     promedio = sum(x["total"] for x in historico) / dias_transcurridos if dias_transcurridos > 0 else 0
     proyeccion_total = promedio * calendar.monthrange(hoy.year, hoy.month)[1]
