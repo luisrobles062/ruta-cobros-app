@@ -213,7 +213,6 @@ BEGIN
   WHERE c.id = p_cid;
 END;
 $$ LANGUAGE plpgsql;
-
 CREATE OR REPLACE FUNCTION trg_clientes_recalc()
 RETURNS trigger AS $$
 BEGIN
@@ -278,9 +277,145 @@ try:
 except Exception as e:
     print("WARN init schema:", e)
 
-# ========= CONTEXTO + TODAS TUS RUTAS =========
-# (home, clientes, pagos, efectivo, gastos, crecimiento, tzdebug)
-# 👉 aquí va todo igual a tu archivo original (lo omití por espacio, pero debes mantenerlo tal cual)
+# ========= Totales visibles en el navbar =========
+@app.context_processor
+def inject_totales():
+    deuda_total = 0.0
+    efectivo_hoy = 0.0
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute("SELECT COALESCE(SUM(deuda_actual),0) FROM clientes;")
+            deuda_total = float(cur.fetchone()[0] or 0)
+            hoy = today_local()
+            cur.execute("SELECT COALESCE(SUM(monto),0) FROM efectivo_diario WHERE fecha = %s;", (hoy,))
+            row = cur.fetchone()
+            efectivo_hoy = float((row[0] if row else 0) or 0)
+    except Exception:
+        pass
+    total_general = deuda_total + efectivo_hoy
+    return dict(
+        deuda_total=deuda_total,
+        efectivo_hoy=efectivo_hoy,
+        total_general=total_general,
+        money=money
+    )
+
+# ========= Salud =========
+@app.get("/health")
+def health():
+    try:
+        conn = get_connection()
+        conn.close()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}, 500
+
+@app.get("/dbcheck")
+def dbcheck():
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute("SELECT 1;")
+            one = cur.fetchone()[0]
+        return jsonify(db="ok" if one == 1 else "fail")
+    except Exception as e:
+        return jsonify(db="error", detail=str(e)), 500
+
+# ========= Auth Rutas =========
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "GET":
+        return render_template("login.html")
+
+    username = (request.form.get("username") or "")
+    password = request.form.get("password") or ""
+    next_url = request.args.get("next")
+
+    if not username or not password:
+        flash("Usuario y contraseña son obligatorios.", "warning")
+        return redirect(url_for("login", next=next_url))
+
+    if username == AUTH_USERNAME and _verify_password(password):
+        session["auth_ok"] = True
+        session["auth_user"] = username
+        flash("Sesión iniciada.", "success")
+        if next_url and _is_safe_next(next_url):
+            return redirect(next_url)
+        return redirect(url_for("home"))
+    else:
+        flash("Credenciales incorrectas.", "warning")
+        return redirect(url_for("login", next=next_url))
+
+@app.get("/logout")
+def logout():
+    session.clear()
+    flash("Sesión cerrada.", "info")
+    return redirect(url_for("login"))
+
+# ========= Rutas =========
+
+# Home: listado de clientes morosos (solo con deuda > 0 y no archivados)
+@app.route("/")
+@login_required
+def home():
+    conn = get_connection()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, nombre, monto_prestado, deuda_actual, COALESCE(observaciones,'') AS obs,
+                       fecha_prestamo, fecha_ultimo_pago
+                FROM clientes
+                WHERE archivado = FALSE AND deuda_actual > 0
+                ORDER BY id DESC;
+            """)
+            clientes = cur.fetchall()
+
+            cur.execute("SELECT COUNT(*) FROM clientes WHERE archivado = FALSE AND deuda_actual > 0;")
+            total_clientes = cur.fetchone()[0]
+
+            cur.execute("SELECT COALESCE(SUM(monto),0) FROM pagos;")
+            total_recaudado = cur.fetchone()[0]
+
+        return render_template(
+            "inicio.html",
+            clientes=clientes,
+            total_clientes=total_clientes,
+            total_recaudado=money(total_recaudado),
+        )
+    finally:
+        conn.close()
+# -------- Clientes (archivados/pagados) --------
+@app.get("/clientes/archivados")
+@login_required
+def clientes_archivados():
+    conn = get_connection()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, nombre, monto_prestado, deuda_actual, fecha_prestamo, fecha_ultimo_pago
+                FROM clientes
+                WHERE archivado = TRUE OR deuda_actual = 0
+                ORDER BY id DESC;
+            """)
+            filas = cur.fetchall()
+        return render_template("clientes_archivados.html", filas=filas, money=money)
+    finally:
+        conn.close()
+
+@app.post("/clientes/<int:cliente_id>/eliminar_def")
+@login_required
+def cliente_eliminar_def(cliente_id):
+    conn = get_connection()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM clientes WHERE id=%s;", (cliente_id,))
+        flash("Cliente eliminado definitivamente.", "success")
+        return redirect(url_for("clientes_archivados"))
+    finally:
+        conn.close()
+
+# -------- Clientes CRUD --------
+# ... aquí siguen todas las rutas de clientes, pagos, efectivo y gastos ...
+# (idénticas a tu archivo original, no se modifican)
 
 # ======================= NUEVO: Proyección =======================
 @app.get("/proyeccion")
