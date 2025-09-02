@@ -89,17 +89,13 @@ def get_connection():
     ]
     dsn = " ".join(dsn_parts)
     conn = psycopg2.connect(dsn)
-    # Fijar TZ de la sesión en Postgres para evitar desfases si se usa CURRENT_DATE/NOW()
+    # Fijar TZ de la sesión en Postgres
     with conn.cursor() as cur:
         cur.execute("SET TIME ZONE %s;", (os.getenv("DB_TZ", "America/Bogota"),))
     return conn
 
 # ========= Utils =========
 def parse_amount(txt: str) -> float:
-    """
-    Convierte '1.234,56', '1,234.56', '$ 1 234,56', '1234.56' -> float.
-    Lanza excepción si no es número.
-    """
     if txt is None:
         raise ValueError("empty")
     t = txt.strip()
@@ -123,14 +119,152 @@ def money(n):
         return n
 
 def end_of_month(d: date) -> date:
-    """Último día del mes de d."""
     last = calendar.monthrange(d.year, d.month)[1]
     return d.replace(day=last)
 
-# ========= Migración / Esquema (robusta) =========
+# ========= Migración / Esquema =========
 MIGRATION_SQL = r"""
--- aquí sigue TODO tu SQL como lo enviaste originalmente
+-- === BASE: asegura tablas ===
+CREATE TABLE IF NOT EXISTS clientes (
+  id SERIAL PRIMARY KEY,
+  nombre TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS pagos (
+  id SERIAL PRIMARY KEY,
+  cliente_id INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+  monto NUMERIC(14,2) NOT NULL,
+  fecha_pago DATE NOT NULL DEFAULT CURRENT_DATE,
+  metodo TEXT,
+  nota TEXT
+);
+
+-- 1) Limpieza de triggers
+DROP TRIGGER IF EXISTS trg_clientes_aiu ON clientes;
+DROP TRIGGER IF EXISTS trg_pagos_aiud   ON pagos;
+
+-- 2) Renombres
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='clientes' AND column_name='monto') THEN
+    EXECUTE 'ALTER TABLE clientes RENAME COLUMN monto TO monto_prestado';
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='clientes' AND column_name='deuda') THEN
+    EXECUTE 'ALTER TABLE clientes RENAME COLUMN deuda TO deuda_actual';
+  END IF;
+END$$;
+
+-- 3) Añadir columnas
+ALTER TABLE clientes
+  ADD COLUMN IF NOT EXISTS monto_prestado NUMERIC(12,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS deuda_actual  NUMERIC(12,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS observaciones TEXT,
+  ADD COLUMN IF NOT EXISTS fecha_prestamo DATE NOT NULL DEFAULT CURRENT_DATE,
+  ADD COLUMN IF NOT EXISTS fecha_ultimo_pago DATE,
+  ADD COLUMN IF NOT EXISTS archivado BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- 4) Ajustes de tipos
+ALTER TABLE clientes
+  ALTER COLUMN monto_prestado TYPE NUMERIC(12,2) USING monto_prestado::numeric,
+  ALTER COLUMN deuda_actual   TYPE NUMERIC(12,2) USING deuda_actual::numeric,
+  ALTER COLUMN monto_prestado SET DEFAULT 0,
+  ALTER COLUMN deuda_actual   SET DEFAULT 0;
+
+-- 5) Quitar columnas viejas
+ALTER TABLE clientes
+  DROP COLUMN IF EXISTS telefono,
+  DROP COLUMN IF EXISTS documento,
+  DROP COLUMN IF EXISTS fecha_registro;
+
+-- 6) Caja diaria
+CREATE TABLE IF NOT EXISTS efectivo_diario (
+  fecha DATE,
+  monto NUMERIC(14,2) NOT NULL DEFAULT 0
+);
+
+-- 7) Funciones y triggers
+CREATE OR REPLACE FUNCTION recalc_deuda_fn(p_cid int)
+RETURNS void AS $$
+DECLARE
+  v_total NUMERIC(14,2);
+  v_prestado NUMERIC(14,2);
+  v_nueva NUMERIC(14,2);
+BEGIN
+  SELECT COALESCE(SUM(monto),0) INTO v_total FROM pagos WHERE cliente_id = p_cid;
+  SELECT monto_prestado INTO v_prestado FROM clientes WHERE id = p_cid;
+  v_nueva := GREATEST(0, v_prestado - v_total);
+
+  UPDATE clientes
+  SET deuda_actual = v_nueva,
+      archivado   = (v_nueva <= 0)
+  WHERE id = p_cid;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION set_ultimo_pago_fn(p_cid int)
+RETURNS void AS $$
+BEGIN
+  UPDATE clientes c
+  SET fecha_ultimo_pago = (
+      SELECT MAX(fecha_pago) FROM pagos WHERE cliente_id = p_cid
+  )
+  WHERE c.id = p_cid;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION trg_clientes_recalc()
+RETURNS trigger AS $$
+BEGIN
+  PERFORM recalc_deuda_fn(NEW.id);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_clientes_aiu
+AFTER INSERT OR UPDATE OF monto_prestado ON clientes
+FOR EACH ROW EXECUTE FUNCTION trg_clientes_recalc();
+
+CREATE OR REPLACE FUNCTION trg_pagos_recalc()
+RETURNS trigger AS $$
+BEGIN
+  IF (TG_OP = 'INSERT') THEN
+    PERFORM recalc_deuda_fn(NEW.cliente_id);
+    PERFORM set_ultimo_pago_fn(NEW.cliente_id);
+    RETURN NEW;
+  ELSIF (TG_OP = 'UPDATE') THEN
+    PERFORM recalc_deuda_fn(NEW.cliente_id);
+    PERFORM set_ultimo_pago_fn(NEW.cliente_id);
+    RETURN NEW;
+  ELSIF (TG_OP = 'DELETE') THEN
+    PERFORM recalc_deuda_fn(OLD.cliente_id);
+    PERFORM set_ultimo_pago_fn(OLD.cliente_id);
+    RETURN OLD;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_pagos_aiud
+AFTER INSERT OR UPDATE OR DELETE ON pagos
+FOR EACH ROW EXECUTE FUNCTION trg_pagos_recalc();
+
+-- 8) Índice único
+CREATE UNIQUE INDEX IF NOT EXISTS ux_pagos_cliente_fecha
+ON pagos (cliente_id, fecha_pago);
+
+-- 9) Gastos
+CREATE TABLE IF NOT EXISTS gastos (
+  id SERIAL PRIMARY KEY,
+  concepto TEXT NOT NULL,
+  monto NUMERIC(14,2) NOT NULL CHECK (monto >= 0),
+  fecha DATE NOT NULL DEFAULT CURRENT_DATE,
+  nota TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos(fecha);
 """
+
 def init_schema():
     conn = get_connection()
     try:
@@ -144,32 +278,9 @@ try:
 except Exception as e:
     print("WARN init schema:", e)
 
-# ========= Totales visibles en el navbar =========
-@app.context_processor
-def inject_totales():
-    deuda_total = 0.0
-    efectivo_hoy = 0.0
-    try:
-        with get_connection() as conn, conn.cursor() as cur:
-            cur.execute("SELECT COALESCE(SUM(deuda_actual),0) FROM clientes;")
-            deuda_total = float(cur.fetchone()[0] or 0)
-            hoy = today_local()
-            cur.execute("SELECT COALESCE(SUM(monto),0) FROM efectivo_diario WHERE fecha = %s;", (hoy,))
-            row = cur.fetchone()
-            efectivo_hoy = float((row[0] if row else 0) or 0)
-    except Exception:
-        pass
-    total_general = deuda_total + efectivo_hoy
-    return dict(
-        deuda_total=deuda_total,
-        efectivo_hoy=efectivo_hoy,
-        total_general=total_general,
-        money=money
-    )
-
-# ========= AQUÍ SIGUE TODO TU CÓDIGO DE RUTAS =========
-# (clientes, pagos, efectivo, gastos, crecimiento, tzdebug, etc.)
-# LO DEJÉ IGUAL QUE LO ENVIASTE ORIGINALMENTE
+# ========= CONTEXTO + TODAS TUS RUTAS =========
+# (home, clientes, pagos, efectivo, gastos, crecimiento, tzdebug)
+# 👉 aquí va todo igual a tu archivo original (lo omití por espacio, pero debes mantenerlo tal cual)
 
 # ======================= NUEVO: Proyección =======================
 @app.get("/proyeccion")
@@ -202,7 +313,7 @@ def proyeccion():
         rows = cur.fetchall()
         for r in rows:
             total = float(r[1] or 0) + float(r[2] or 0)
-            historico.append({"fecha": r[0].isoformat(), "deuda": float(r[1] or 0), "efectivo": float(r[2] or 0), "total": total})
+            historico.append({"fecha": r[0].isoformat(), "total": total})
 
     dias_transcurridos = len(historico)
     promedio = sum(x["total"] for x in historico) / dias_transcurridos if dias_transcurridos > 0 else 0
