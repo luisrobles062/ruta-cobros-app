@@ -2,27 +2,16 @@
 # -*- coding: utf-8 -*-
 import os
 import hmac
-import calendar
-from datetime import date, datetime, timedelta
+from datetime import date
 from urllib.parse import urlparse, parse_qsl
 from decimal import Decimal, InvalidOperation
 from functools import wraps
-from zoneinfo import ZoneInfo
 
 from flask import (
-    Flask, render_template, render_template_string,
-    request, redirect, url_for, flash, jsonify, session
+    Flask, render_template, request, redirect, url_for, flash, jsonify, session
 )
 import psycopg2
 
-# ================== TZ app ==================
-APP_TZ = ZoneInfo(os.getenv("APP_TZ", "America/Bogota"))
-
-def today_local() -> date:
-    """Fecha local según APP_TZ (America/Bogota por defecto)."""
-    return datetime.now(APP_TZ).date()
-
-# ================== Flask ==================
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "secreto")
 app.config.update(
@@ -88,11 +77,7 @@ def get_connection():
         f"sslmode={params.get('sslmode','require')}",
     ]
     dsn = " ".join(dsn_parts)
-    conn = psycopg2.connect(dsn)
-    # Fijar TZ de la sesión en Postgres para evitar desfases si se usa CURRENT_DATE/NOW()
-    with conn.cursor() as cur:
-        cur.execute("SET TIME ZONE %s;", (os.getenv("DB_TZ", "America/Bogota"),))
-    return conn
+    return psycopg2.connect(dsn)
 
 # ========= Utils =========
 def parse_amount(txt: str) -> float:
@@ -105,7 +90,7 @@ def parse_amount(txt: str) -> float:
     t = txt.strip()
     if not t:
         raise ValueError("empty")
-    for ch in ["$", "€", "₡", "₲", "₵", "£", "¥", "₿", " "]:
+    for ch in ["$", "€", "¢", "?", "?", "£", "¥", "?", " "]:
         t = t.replace(ch, "")
     if "," in t and "." in t:
         if t.rfind(",") > t.rfind("."):
@@ -121,11 +106,6 @@ def money(n):
         return f"${float(n):,.2f}"
     except Exception:
         return n
-
-def end_of_month(d: date) -> date:
-    """Último día del mes de d."""
-    last = calendar.monthrange(d.year, d.month)[1]
-    return d.replace(day=last)
 
 # ========= Migración / Esquema (robusta) =========
 MIGRATION_SQL = r"""
@@ -290,20 +270,6 @@ WHERE c.id = p.cliente_id;
 
 -- Backfill de archivado según deuda_actual
 UPDATE clientes SET archivado = (deuda_actual <= 0);
-
--- (NUEVO) Índice único: un pago por cliente por día
-CREATE UNIQUE INDEX IF NOT EXISTS ux_pagos_cliente_fecha
-ON pagos (cliente_id, fecha_pago);
-
--- 9) Gastos operativos (independientes de cobros)
-CREATE TABLE IF NOT EXISTS gastos (
-  id SERIAL PRIMARY KEY,
-  concepto TEXT NOT NULL,
-  monto NUMERIC(14,2) NOT NULL CHECK (monto >= 0),
-  fecha DATE NOT NULL DEFAULT CURRENT_DATE,
-  nota TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos(fecha);
 """
 
 def init_schema():
@@ -329,8 +295,7 @@ def inject_totales():
         with get_connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT COALESCE(SUM(deuda_actual),0) FROM clientes;")
             deuda_total = float(cur.fetchone()[0] or 0)
-            hoy = today_local()
-            cur.execute("SELECT COALESCE(SUM(monto),0) FROM efectivo_diario WHERE fecha = %s;", (hoy,))
+            cur.execute("SELECT COALESCE(SUM(monto),0) FROM efectivo_diario WHERE fecha = CURRENT_DATE;")
             row = cur.fetchone()
             efectivo_hoy = float((row[0] if row else 0) or 0)
     except Exception:
@@ -458,7 +423,7 @@ def cliente_eliminar_def(cliente_id):
     finally:
         conn.close()
 
-# -------- Clientes CRUD --------
+# -------- Clientes CRUD existente --------
 @app.route("/clientes/nuevo", methods=["GET", "POST"])
 @login_required
 def cliente_nuevo():
@@ -483,7 +448,7 @@ def cliente_nuevo():
         return redirect(url_for("cliente_nuevo"))
 
     try:
-        fecha_prestamo = date.fromisoformat(fecha_str) if fecha_str else today_local()
+        fecha_prestamo = date.fromisoformat(fecha_str) if fecha_str else date.today()
     except Exception:
         flash("Fecha de préstamo inválida (usa AAAA-MM-DD).", "warning")
         return redirect(url_for("cliente_nuevo"))
@@ -536,7 +501,7 @@ def cliente_editar(cliente_id):
             return redirect(url_for("cliente_editar", cliente_id=cliente_id))
 
         try:
-            fecha_prestamo = date.fromisoformat(fecha_str) if fecha_str else today_local()
+            fecha_prestamo = date.fromisoformat(fecha_str) if fecha_str else date.today()
         except Exception:
             flash("Fecha de préstamo inválida (usa AAAA-MM-DD).", "warning")
             return redirect(url_for("cliente_editar", cliente_id=cliente_id))
@@ -626,8 +591,7 @@ def pagos_listado():
             cur.execute("SELECT COALESCE(SUM(monto),0) FROM pagos;")
             total_recaudado = cur.fetchone()[0]
 
-            hoy = today_local()
-            cur.execute("SELECT COALESCE(SUM(monto),0) FROM pagos WHERE fecha_pago = %s;", (hoy,))
+            cur.execute("SELECT COALESCE(SUM(monto),0) FROM pagos WHERE fecha_pago = CURRENT_DATE;")
             total_hoy_pagos = cur.fetchone()[0]
 
         return render_template(
@@ -653,7 +617,7 @@ def pago_nuevo():
 
     if not cliente_id or not monto:
         flash("Cliente y monto son obligatorios.", "warning")
-        return redirect(url_for("pagos_listado", cliente_id=cliente_id))
+        return redirect(url_for("pagos_listado"))
 
     try:
         monto_norm = parse_amount(monto)
@@ -661,35 +625,23 @@ def pago_nuevo():
             raise ValueError
     except Exception:
         flash("Monto inválido.", "warning")
-        return redirect(url_for("pagos_listado", cliente_id=cliente_id))
+        return redirect(url_for("pagos_listado"))
 
     try:
-        fecha_pago = date.fromisoformat(fecha_str) if fecha_str else today_local()
+        fecha_pago = date.fromisoformat(fecha_str) if fecha_str else date.today()
     except Exception:
         flash("Fecha de pago inválida (usa AAAA-MM-DD).", "warning")
-        return redirect(url_for("pagos_listado", cliente_id=cliente_id))
+        return redirect(url_for("pagos_listado"))
 
     conn = get_connection()
     try:
         with conn, conn.cursor() as cur:
-            # ❗️VALIDACIÓN: un pago por cliente por día
-            cur.execute("""
-                SELECT 1
-                FROM pagos
-                WHERE cliente_id = %s AND fecha_pago = %s
-                LIMIT 1;
-            """, (int(cliente_id), fecha_pago))
-            ya_pago = cur.fetchone() is not None
-            if ya_pago:
-                flash("ESTE CLIENTE YA PAGO HOY", "warning")
-                return redirect(url_for("pagos_listado", cliente_id=cliente_id))
-
             cur.execute("""
                 INSERT INTO pagos (cliente_id, monto, fecha_pago, metodo, nota)
                 VALUES (%s, %s, %s, %s, %s);
             """, (int(cliente_id), monto_norm, fecha_pago, metodo, nota))
         flash("Pago registrado.", "success")
-        return redirect(url_for("pagos_listado", cliente_id=cliente_id))
+        return redirect(url_for("pagos_listado"))
     finally:
         conn.close()
 
@@ -718,7 +670,6 @@ def pago_editar(pago_id):
 
             return render_template("editar_pago.html", pago=pago, clientes=clientes)
 
-        # POST
         cliente_id = request.form.get("cliente_id")
         monto = request.form.get("monto")
         metodo = (request.form.get("metodo") or "").strip()
@@ -726,40 +677,18 @@ def pago_editar(pago_id):
 
         try:
             monto_norm = parse_amount(monto)
-            if monto_norm <= 0:
-                raise ValueError
         except Exception:
             flash("Monto inválido.", "warning")
             return redirect(url_for("pago_editar", pago_id=pago_id))
 
         with conn, conn.cursor() as cur:
-            # Tomamos la fecha original del pago (no se edita en el form)
-            cur.execute("SELECT fecha_pago FROM pagos WHERE id=%s;", (pago_id,))
-            row = cur.fetchone()
-            if not row:
-                flash("Pago no encontrado.", "warning")
-                return redirect(url_for("pagos_listado"))
-            fecha_pago = row[0]
-
-            # ❗️VALIDACIÓN: evitar duplicado al cambiar cliente
-            cur.execute("""
-                SELECT 1
-                FROM pagos
-                WHERE cliente_id = %s AND fecha_pago = %s AND id <> %s
-                LIMIT 1;
-            """, (int(cliente_id), fecha_pago, pago_id))
-            ya_pago = cur.fetchone() is not None
-            if ya_pago:
-                flash("ESTE CLIENTE YA PAGO HOY", "warning")
-                return redirect(url_for("pagos_listado", cliente_id=cliente_id))
-
             cur.execute("""
                 UPDATE pagos
                 SET cliente_id=%s, monto=%s, metodo=%s, nota=%s
                 WHERE id=%s;
             """, (int(cliente_id), monto_norm, metodo, nota, pago_id))
         flash("Pago actualizado.", "success")
-        return redirect(url_for("pagos_listado", cliente_id=cliente_id))
+        return redirect(url_for("pagos_listado"))
     finally:
         conn.close()
 
@@ -782,7 +711,7 @@ def _parse_amount_relajado(txt: str):
     t = txt.strip()
     if not t:
         return None
-    for ch in ["$", "€", "₡", "₲", "₵", "£", "¥", "₿", " "]:
+    for ch in ["$", "€", "¢", "?", "?", "£", "¥", "?", " "]:
         t = t.replace(ch, "")
     if "," in t and "." in t:
         if t.rfind(",") > t.rfind("."):
@@ -820,7 +749,7 @@ def efectivo():
             monto = monto.quantize(Decimal("0.01"))
 
             try:
-                f = date.fromisoformat(fecha_str) if fecha_str else today_local()
+                f = date.fromisoformat(fecha_str) if fecha_str else date.today()
             except Exception:
                 flash("Fecha inválida (usa AAAA-MM-DD).", "warning")
                 return redirect(url_for("efectivo"))
@@ -844,8 +773,7 @@ def efectivo():
             return redirect(url_for("efectivo"))
 
     with get_connection() as conn, conn.cursor() as cur:
-        hoy = today_local()
-        cur.execute("SELECT COALESCE(SUM(monto),0) FROM efectivo_diario WHERE fecha = %s;", (hoy,))
+        cur.execute("SELECT COALESCE(SUM(monto),0) FROM efectivo_diario WHERE fecha=CURRENT_DATE;")
         row = cur.fetchone()
         efectivo_hoy = float((row[0] if row else 0) or 0)
 
@@ -859,7 +787,7 @@ def efectivo():
         historico = cur.fetchall()
     return render_template("efectivo.html", efectivo_hoy=efectivo_hoy, historico=historico)
 
-# -------- Recaudo diario --------
+# -------- Recaudo diario (ya existente) --------
 @app.get("/pagos/diario")
 @login_required
 def pagos_diario():
@@ -879,328 +807,6 @@ def pagos_diario():
         return render_template("pagos_diario.html", filas=filas, money=money)
     finally:
         conn.close()
-
-# -------- NUEVO: Clientes que NO pagaron (inline template) --------
-@app.get("/pagos/faltantes")
-@login_required
-def pagos_faltantes():
-    fecha_str = (request.args.get("fecha") or "").strip()
-    try:
-        f = date.fromisoformat(fecha_str) if fecha_str else today_local()
-    except Exception:
-        flash("Fecha inválida (usa AAAA-MM-DD).", "warning")
-        return redirect(url_for("pagos_faltantes"))
-
-    conn = get_connection()
-    try:
-        with conn, conn.cursor() as cur:
-            cur.execute("""
-                SELECT c.id, c.nombre, c.deuda_actual
-                FROM clientes c
-                WHERE c.archivado = FALSE
-                  AND NOT EXISTS (
-                    SELECT 1 FROM pagos p
-                    WHERE p.cliente_id = c.id AND p.fecha_pago = %s
-                  )
-                ORDER BY c.nombre ASC;
-            """, (f,))
-            faltantes = cur.fetchall()
-
-            cur.execute("SELECT COUNT(*) FROM clientes WHERE archivado = FALSE;")
-            total_activos = cur.fetchone()[0]
-
-        html = """
-<!doctype html>
-<html lang="es"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Faltantes</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-</head><body class="bg-light">
-<div class="container mt-3">
-  <div class="d-flex justify-content-between align-items-center">
-    <h3>Clientes SIN pago en {{ f }}</h3>
-    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('pagos_listado') }}">Volver a Pagos</a>
-  </div>
-  <form method="get" class="mb-3">
-    <label class="me-2">Fecha:</label>
-    <input type="date" name="fecha" value="{{ f }}">
-    <button class="btn btn-primary btn-sm ms-2" type="submit">Filtrar</button>
-  </form>
-  <p>Total activos: {{ total_activos }} | Faltantes: <strong>{{ faltantes|length }}</strong></p>
-  <div class="table-responsive">
-    <table class="table table-sm table-striped align-middle">
-      <thead><tr><th>ID</th><th>Nombre</th><th>Deuda actual</th></tr></thead>
-      <tbody>
-      {% for x in faltantes %}
-        <tr><td>{{ x[0] }}</td><td>{{ x[1] }}</td><td>{{ money(x[2]) }}</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-</body></html>
-"""
-        return render_template_string(
-            html, f=f.isoformat(), faltantes=faltantes,
-            total_activos=total_activos, money=money
-        )
-    finally:
-        conn.close()
-
-# ======================= NUEVO: Gastos (robusto) =======================
-@app.route("/gastos", methods=["GET", "POST"])
-@login_required
-def gastos():
-    def ensure_table(conn):
-        with conn.cursor() as cur:
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS gastos (
-                  id SERIAL PRIMARY KEY,
-                  concepto TEXT NOT NULL,
-                  monto NUMERIC(14,2) NOT NULL CHECK (monto >= 0),
-                  fecha DATE NOT NULL DEFAULT CURRENT_DATE,
-                  nota TEXT
-                );
-            """)
-
-    if request.method == "POST":
-        concepto = (request.form.get("concepto") or "").strip()
-        monto_raw = (request.form.get("monto") or "").strip()
-        fecha_str = (request.form.get("fecha") or "").strip()
-        nota = (request.form.get("nota") or "").strip()
-
-        if not concepto or not monto_raw:
-            flash("Concepto y monto son obligatorios.", "warning")
-            return redirect(url_for("gastos"))
-
-        try:
-            normalizado = _parse_amount_relajado(monto_raw) or monto_raw
-            monto = Decimal(normalizado)
-            if monto < 0:
-                raise InvalidOperation
-            monto = monto.quantize(Decimal("0.01"))
-        except Exception:
-            flash("Monto inválido.", "warning")
-            return redirect(url_for("gastos"))
-
-        try:
-            f = date.fromisoformat(fecha_str) if fecha_str else today_local()
-        except Exception:
-            flash("Fecha inválida (usa AAAA-MM-DD).", "warning")
-            return redirect(url_for("gastos"))
-
-        with get_connection() as conn:
-            ensure_table(conn)
-            with conn.cursor() as cur:
-                cur.execute("""
-                    INSERT INTO gastos (concepto, monto, fecha, nota)
-                    VALUES (%s, %s, %s, %s);
-                """, (concepto, monto, f, nota))
-            conn.commit()
-
-        flash("Gasto registrado.", "success")
-        return redirect(url_for("gastos"))
-
-    # GET
-    desde_str = (request.args.get("desde") or "").strip()
-    hasta_str = (request.args.get("hasta") or "").strip()
-
-    where = []
-    params = []
-    if desde_str:
-        try:
-            d = date.fromisoformat(desde_str); where.append("fecha >= %s"); params.append(d)
-        except Exception:
-            pass
-    if hasta_str:
-        try:
-            h = date.fromisoformat(hasta_str); where.append("fecha <= %s"); params.append(h)
-        except Exception:
-            pass
-
-    sql_list = f"""
-        SELECT id, fecha, concepto, monto, COALESCE(nota,'')
-        FROM gastos
-        {'WHERE ' + ' AND '.join(where) if where else ''}
-        ORDER BY fecha DESC, id DESC
-        LIMIT 200;
-    """
-    sql_sum = f"""
-        SELECT COALESCE(SUM(monto),0)
-        FROM gastos
-        {'WHERE ' + ' AND '.join(where) if where else ''};
-    """
-
-    with get_connection() as conn:
-        ensure_table(conn)
-        with conn.cursor() as cur:
-            cur.execute(sql_list, tuple(params))
-            filas = cur.fetchall()
-
-            cur.execute(sql_sum, tuple(params))
-            total_filtro = float(cur.fetchone()[0] or 0)
-
-            ini_mes = today_local().replace(day=1)
-            cur.execute("SELECT COALESCE(SUM(monto),0) FROM gastos WHERE fecha >= %s;", (ini_mes,))
-            total_mes = float(cur.fetchone()[0] or 0)
-
-    return render_template(
-        "gastos.html",
-        filas=filas,
-        total_mes=total_mes,
-        total_filtro=total_filtro,
-        desde=desde_str, hasta=hasta_str,
-        today=today_local().isoformat(),
-        money=money
-    )
-
-@app.post("/gastos/<int:gasto_id>/eliminar")
-@login_required
-def gasto_eliminar(gasto_id):
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM gastos WHERE id=%s;", (gasto_id,))
-        conn.commit()
-    flash("Gasto eliminado.", "success")
-    return redirect(url_for("gastos"))
-
-# ======================= NUEVO: Crecimiento mejorado =======================
-@app.get("/crecimiento")
-@login_required
-def crecimiento():
-    """
-    modos:
-      - 'ultimo' (default): Total(fin) vs Total(fin-1 día)
-      - 'rango'           : Total(fin) vs Total(inicio)
-      - 'mensual'         : Serie mes a mes (MoM) con snapshots reales
-    """
-    ini_str = (request.args.get("inicio") or "").strip()
-    fin_str = (request.args.get("fin") or "").strip()
-    modo = (request.args.get("modo") or "ultimo").strip().lower()
-
-    today = today_local()
-    if not ini_str:
-        ini = today.replace(day=1)
-    else:
-        try:
-            ini = date.fromisoformat(ini_str)
-        except Exception:
-            flash("Fecha de inicio inválida (AAAA-MM-DD).", "warning")
-            return redirect(url_for("crecimiento"))
-
-    if not fin_str:
-        fin = today
-    else:
-        try:
-            fin = date.fromisoformat(fin_str)
-        except Exception:
-            flash("Fecha de fin inválida (AAAA-MM-DD).", "warning")
-            return redirect(url_for("crecimiento"))
-
-    if fin < ini:
-        flash("Fin no puede ser menor que inicio.", "warning")
-        return redirect(url_for("crecimiento", inicio=ini.isoformat(), fin=fin.isoformat(), modo=modo))
-
-    def total_en(fecha_obj: date):
-        with get_connection() as conn, conn.cursor() as cur:
-            cur.execute("""
-                WITH pagos_acum AS (
-                  SELECT cliente_id, COALESCE(SUM(monto),0) AS total
-                  FROM pagos
-                  WHERE fecha_pago <= %s
-                  GROUP BY cliente_id
-                )
-                SELECT COALESCE(SUM(GREATEST(0, c.monto_prestado - COALESCE(p.total,0))), 0) AS deuda_as_of
-                FROM clientes c
-                LEFT JOIN pagos_acum p ON p.cliente_id = c.id
-                WHERE c.fecha_prestamo <= %s;
-            """, (fecha_obj, fecha_obj))
-            deuda_as_of = float(cur.fetchone()[0] or 0)
-
-            cur.execute("SELECT COALESCE(SUM(monto),0) FROM efectivo_diario WHERE fecha = %s;", (fecha_obj,))
-            efectivo_dia = float(cur.fetchone()[0] or 0)
-
-        return deuda_as_of + efectivo_dia, deuda_as_of, efectivo_dia
-
-    # ===== modos 'ultimo' y 'rango' =====
-    if modo in ("ultimo", "rango"):
-        if modo == "rango":
-            base_fecha = ini
-            comp_fecha = fin
-        else:
-            base_fecha = fin - timedelta(days=1)
-            comp_fecha = fin
-
-        total_base, deuda_base, efec_base = total_en(base_fecha)
-        total_comp, deuda_comp, efec_comp = total_en(comp_fecha)
-
-        delta_abs = total_comp - total_base
-        crecimiento_pct = None if total_base == 0 else ((total_comp - total_base) / total_base) * 100.0
-
-        return render_template(
-            "crecimiento.html",
-            ini=ini.isoformat(), fin=fin.isoformat(),
-            modo=modo,
-            base_fecha=base_fecha.isoformat(), comp_fecha=comp_fecha.isoformat(),
-            deuda_base=deuda_base, efec_base=efec_base, total_base=total_base,
-            deuda_comp=deuda_comp, efec_comp=efec_comp, total_comp=total_comp,
-            delta_abs=delta_abs, crecimiento_pct=crecimiento_pct,
-            money=money
-        )
-
-    # ===== modo 'mensual' (MoM real) =====
-    snaps = []
-    cursor = ini.replace(day=1)
-    while cursor <= fin:
-        snap = end_of_month(cursor)
-        if snap > fin:
-            snap = fin
-        if snap >= ini:
-            snaps.append(snap)
-        if cursor.month == 12:
-            cursor = date(cursor.year + 1, 1, 1)
-        else:
-            cursor = date(cursor.year, cursor.month + 1, 1)
-
-    serie = []
-    for s in snaps:
-        tot, deu, ef = total_en(s)
-        serie.append({"fecha": s, "total": tot, "deuda": deu, "efectivo": ef})
-
-    for i in range(len(serie)):
-        if i == 0:
-            serie[i]["delta_abs"] = None
-            serie[i]["delta_pct"] = None
-        else:
-            prev = serie[i-1]["total"]; cur = serie[i]["total"]
-            serie[i]["delta_abs"] = cur - prev
-            serie[i]["delta_pct"] = (None if prev == 0 else ((cur - prev) / prev) * 100.0)
-
-    return render_template(
-        "crecimiento_mensual.html",
-        ini=ini.isoformat(), fin=fin.isoformat(),
-        serie=serie, money=money
-    )
-
-# -------- Debug TZ (opcional) --------
-@app.get("/tzdebug")
-def tzdebug():
-    try:
-        with get_connection() as conn, conn.cursor() as cur:
-            cur.execute("SHOW TIME ZONE;")
-            db_tz = cur.fetchone()[0]
-            cur.execute("SELECT CURRENT_DATE, NOW(), (NOW() AT TIME ZONE 'America/Bogota');")
-            cd, now_db, now_co = cur.fetchone()
-        return {
-            "python_today_local": today_local().isoformat(),
-            "APP_TZ": str(APP_TZ),
-            "db_timezone": db_tz,
-            "db_current_date": cd.isoformat(),
-            "db_now": str(now_db),
-            "db_now_at_CO": str(now_co)
-        }
-    except Exception as e:
-        return {"error": str(e)}, 500
 
 # -------- Main --------
 if __name__ == "__main__":
