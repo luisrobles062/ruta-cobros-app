@@ -14,16 +14,11 @@
     .container-narrow { max-width: 1100px; }
     .navbar-metrics { gap: .5rem; }
     .metric-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: .4rem;
-      background: #fff;
-      color: #0b2f26;
+      display: inline-flex; align-items: center; gap: .4rem;
+      background: #fff; color: #0b2f26;
       border: 1px solid rgba(0,0,0,.08);
-      border-radius: 999px;
-      padding: .35rem .7rem;
-      font-weight: 600;
-      font-size: .9rem;
+      border-radius: 999px; padding: .35rem .7rem;
+      font-weight: 600; font-size: .9rem;
       box-shadow: 0 1px 2px rgba(0,0,0,.06);
       white-space: nowrap;
     }
@@ -36,6 +31,12 @@
 
 <body class="bg-light">
 
+{# Defaults: nunca falla aunque inject_totales no corra #}
+{% set _money = money if money is defined else (lambda x: x) %}
+{% set _deuda_total = deuda_total if deuda_total is defined else 0 %}
+{% set _efectivo_hoy = efectivo_hoy if efectivo_hoy is defined else 0 %}
+{% set _total_general = total_general if total_general is defined else 0 %}
+
 {% if session.get("auth_ok") %}
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
   <div class="container-fluid">
@@ -47,54 +48,20 @@
 
     <div class="collapse navbar-collapse" id="nav">
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-
-        <li class="nav-item">
-          <a class="nav-link {% if request.endpoint=='home' %}active{% endif %}" href="{{ url_for('home') }}">Inicio</a>
-        </li>
-
-        <li class="nav-item">
-          <a class="nav-link {% if request.endpoint=='pagos_listado' %}active{% endif %}" href="{{ url_for('pagos_listado') }}">Pagos</a>
-        </li>
-
-        <li class="nav-item">
-          <a class="nav-link {% if request.endpoint=='pagos_diario' %}active{% endif %}" href="{{ url_for('pagos_diario') }}">Recaudo diario</a>
-        </li>
-
-        <li class="nav-item">
-          <a class="nav-link {% if request.endpoint=='pagos_faltantes' %}active{% endif %}" href="{{ url_for('pagos_faltantes') }}">Faltantes</a>
-        </li>
-
-        <li class="nav-item">
-          <a class="nav-link {% if request.endpoint=='clientes_archivados' %}active{% endif %}" href="{{ url_for('clientes_archivados') }}">Archivados</a>
-        </li>
-
-        <li class="nav-item">
-          <a class="nav-link {% if request.endpoint=='gastos' %}active{% endif %}" href="{{ url_for('gastos') }}">Gastos</a>
-        </li>
-
-        <li class="nav-item">
-          <a class="nav-link {% if request.endpoint=='crecimiento' %}active{% endif %}" href="{{ url_for('crecimiento') }}">Crecimiento</a>
-        </li>
-
-        <li class="nav-item">
-          <a class="nav-link {% if request.endpoint=='efectivo' %}active{% endif %}" href="{{ url_for('efectivo') }}">Efectivo</a>
-        </li>
-
+        <li class="nav-item"><a class="nav-link {% if request.endpoint=='home' %}active{% endif %}" href="{{ url_for('home') }}">Inicio</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.endpoint=='pagos_listado' %}active{% endif %}" href="{{ url_for('pagos_listado') }}">Pagos</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.endpoint=='pagos_diario' %}active{% endif %}" href="{{ url_for('pagos_diario') }}">Recaudo diario</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.endpoint=='pagos_faltantes' %}active{% endif %}" href="{{ url_for('pagos_faltantes') }}">Faltantes</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.endpoint=='clientes_archivados' %}active{% endif %}" href="{{ url_for('clientes_archivados') }}">Archivados</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.endpoint=='gastos' %}active{% endif %}" href="{{ url_for('gastos') }}">Gastos</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.endpoint=='crecimiento' %}active{% endif %}" href="{{ url_for('crecimiento') }}">Crecimiento</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.endpoint=='efectivo' %}active{% endif %}" href="{{ url_for('efectivo') }}">Efectivo</a></li>
       </ul>
 
       <div class="navbar-metrics d-none d-lg-inline-flex me-3">
-        <span class="metric-chip deuda">
-          <i class="bi bi-exclamation-octagon"></i>
-          Deuda: <strong>{{ money(deuda_total) }}</strong>
-        </span>
-        <span class="metric-chip efectivo">
-          <i class="bi bi-cash-coin"></i>
-          Efectivo hoy: <strong>{{ money(efectivo_hoy) }}</strong>
-        </span>
-        <span class="metric-chip total">
-          <i class="bi bi-calculator"></i>
-          Total: <strong>{{ money(total_general) }}</strong>
-        </span>
+        <span class="metric-chip deuda"><i class="bi bi-exclamation-octagon"></i>Deuda: <strong>{{ _money(_deuda_total) }}</strong></span>
+        <span class="metric-chip efectivo"><i class="bi bi-cash-coin"></i>Efectivo hoy: <strong>{{ _money(_efectivo_hoy) }}</strong></span>
+        <span class="metric-chip total"><i class="bi bi-calculator"></i>Total: <strong>{{ _money(_total_general) }}</strong></span>
       </div>
 
       <a class="btn btn-outline-light btn-sm" href="{{ url_for('logout') }}">Salir</a>
@@ -104,7 +71,6 @@
 {% endif %}
 
 <main class="container container-narrow my-3">
-
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
       <div class="mt-2">
@@ -119,7 +85,6 @@
   {% endwith %}
 
   {% block content %}{% endblock %}
-
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
