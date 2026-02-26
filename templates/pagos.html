@@ -1,8 +1,9 @@
-{# templates/pagos.html #}
+<!-- templates/pagos.html -->
 {% extends 'base.html' %}
 {% block content %}
+
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h3>Pagos</h3>
+  <h3 class="mb-0">Pagos</h3>
   <form class="d-flex" method="get" action="{{ url_for('pagos_listado') }}">
     <select name="cliente_id" class="form-select form-select-sm me-2" style="min-width: 260px;">
       <option value="">— Todos los clientes —</option>
@@ -21,26 +22,27 @@
       <div class="card-body">
         <form method="post" action="{{ url_for('pago_nuevo') }}">
           <div class="mb-2">
-            <label>Cliente</label>
+            <label class="form-label">Cliente</label>
             <select class="form-select" name="cliente_id" required>
               {% for c in clientes %}
                 <option value="{{ c[0] }}" {% if cliente_id_filtro==c[0] %}selected{% endif %}>{{ c[1] }}</option>
               {% endfor %}
             </select>
           </div>
+
           <div class="mb-2">
-            <label>Monto</label>
+            <label class="form-label">Monto</label>
             <input name="monto" class="form-control" placeholder="Ej: 10.000,00" required>
           </div>
+
           <div class="mb-2">
-            <label>Fecha</label>
+            <label class="form-label">Fecha</label>
             <input type="date" name="fecha_pago" class="form-control">
+            <div class="form-text">Si la dejas vacía, usa la fecha de hoy.</div>
           </div>
-          <button class="btn btn-primary">Registrar</button>
+
+          <button class="btn btn-primary w-100">Registrar</button>
         </form>
-        <small class="text-muted d-block mt-2">
-          Regla: 1 pago por cliente por día.
-        </small>
       </div>
     </div>
 
@@ -48,11 +50,11 @@
     <div class="card">
       <div class="card-header">Resumen del cliente</div>
       <div class="card-body">
-        <p><strong>{{ resumen.nombre }}</strong> (ID: {{ resumen.id }})</p>
-        <p>Prestado: <strong>{{ money(resumen.monto_prestado) }}</strong></p>
-        <p>Pagado: <strong>{{ money(resumen.total_pagado) }}</strong></p>
-        <p>Deuda actual: <strong>{{ money(resumen.deuda_actual) }}</strong></p>
-        <p>F. préstamo: {{ resumen.fecha_prestamo }} | Últ. pago: {{ resumen.fecha_ultimo_pago or '—' }}</p>
+        <p class="mb-1"><strong>{{ resumen.nombre }}</strong> (ID: {{ resumen.id }})</p>
+        <p class="mb-1">Prestado: <strong>{{ money(resumen.monto_prestado) }}</strong></p>
+        <p class="mb-1">Pagado: <strong>{{ money(resumen.total_pagado) }}</strong></p>
+        <p class="mb-1">Deuda actual: <strong>{{ money(resumen.deuda_actual) }}</strong></p>
+        <p class="mb-0">F. préstamo: {{ resumen.fecha_prestamo or '—' }} | Últ. pago: {{ resumen.fecha_ultimo_pago or '—' }}</p>
       </div>
     </div>
     {% endif %}
@@ -63,7 +65,11 @@
       <table class="table table-sm table-striped align-middle">
         <thead>
           <tr>
-            <th>ID</th><th>Cliente</th><th>Monto</th><th>Fecha</th><th></th>
+            <th>ID</th>
+            <th>Cliente</th>
+            <th>Monto</th>
+            <th>Fecha</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -73,9 +79,10 @@
             <td>{{ p[6] }}</td>
             <td>{{ money(p[1]) }}</td>
             <td>{{ p[2] }}</td>
-            <td>
+            <td class="text-nowrap">
               <a class="btn btn-sm btn-outline-primary" href="{{ url_for('pago_editar', pago_id=p[0]) }}">Editar</a>
-              <form class="d-inline" method="post" action="{{ url_for('pago_eliminar', pago_id=p[0]) }}" onsubmit="return confirm('¿Eliminar pago?')">
+              <form class="d-inline" method="post" action="{{ url_for('pago_eliminar', pago_id=p[0]) }}"
+                    onsubmit="return confirm('¿Eliminar pago?')">
                 <button class="btn btn-sm btn-outline-danger">Eliminar</button>
               </form>
             </td>
@@ -85,8 +92,11 @@
       </table>
     </div>
 
-    <p class="mt-2">Total recaudado (histórico): <strong>{{ total_recaudado }}</strong>
-       | Pagado HOY: <strong>{{ total_hoy_pagos }}</strong></p>
+    <p class="mt-2 mb-0">
+      Total recaudado (histórico): <strong>{{ total_recaudado }}</strong>
+      | Pagado HOY: <strong>{{ total_hoy_pagos }}</strong>
+    </p>
   </div>
 </div>
+
 {% endblock %}
