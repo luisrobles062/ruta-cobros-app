@@ -1000,6 +1000,108 @@ def tzdebug():
         }
     except Exception as e:
         return {"error": str(e)}, 500
+        @app.get("/crecimiento")
+@login_required
+def crecimiento():
+    """
+    Version compatible con tu esquema viejo:
+    Total(fecha) = SUM(deuda) + efectivo_diario(fecha)
+    NOTA: deuda en clientes ya es "saldo actual", no "as-of" histórico.
+    """
+    ini_str = (request.args.get("inicio") or "").strip()
+    fin_str = (request.args.get("fin") or "").strip()
+    modo = (request.args.get("modo") or "ultimo").strip().lower()
+
+    today = today_local()
+    if not ini_str:
+        ini = today.replace(day=1)
+    else:
+        try:
+            ini = date.fromisoformat(ini_str)
+        except Exception:
+            flash("Fecha de inicio inválida (AAAA-MM-DD).", "warning")
+            return redirect(url_for("crecimiento"))
+
+    if not fin_str:
+        fin = today
+    else:
+        try:
+            fin = date.fromisoformat(fin_str)
+        except Exception:
+            flash("Fecha de fin inválida (AAAA-MM-DD).", "warning")
+            return redirect(url_for("crecimiento"))
+
+    if fin < ini:
+        flash("Fin no puede ser menor que inicio.", "warning")
+        return redirect(url_for("crecimiento", inicio=ini.isoformat(), fin=fin.isoformat(), modo=modo))
+
+    def total_en(fecha_obj: date):
+        with get_connection() as conn, conn.cursor() as cur:
+            # Como deuda es saldo actual, la "deuda_as_of" histórica real no existe en este esquema.
+            # Usamos el saldo actual como aproximación para que la pantalla funcione.
+            cur.execute("SELECT COALESCE(SUM(deuda),0) FROM clientes;")
+            deuda_total = float(cur.fetchone()[0] or 0)
+
+            cur.execute("SELECT COALESCE(SUM(monto),0) FROM efectivo_diario WHERE fecha = %s;", (fecha_obj,))
+            efectivo_dia = float(cur.fetchone()[0] or 0)
+
+        return deuda_total + efectivo_dia, deuda_total, efectivo_dia
+
+    if modo in ("ultimo", "rango"):
+        if modo == "rango":
+            base_fecha = ini
+            comp_fecha = fin
+        else:
+            base_fecha = fin - timedelta(days=1)
+            comp_fecha = fin
+
+        total_base, deuda_base, efec_base = total_en(base_fecha)
+        total_comp, deuda_comp, efec_comp = total_en(comp_fecha)
+
+        delta_abs = total_comp - total_base
+        crecimiento_pct = None if total_base == 0 else ((total_comp - total_base) / total_base) * 100.0
+
+        return render_template(
+            "crecimiento.html",
+            ini=ini.isoformat(), fin=fin.isoformat(),
+            modo=modo,
+            base_fecha=base_fecha.isoformat(), comp_fecha=comp_fecha.isoformat(),
+            deuda_base=deuda_base, efec_base=efec_base, total_base=total_base,
+            deuda_comp=deuda_comp, efec_comp=efec_comp, total_comp=total_comp,
+            delta_abs=delta_abs, crecimiento_pct=crecimiento_pct,
+            money=money
+        )
+
+    # modo mensual (serie)
+    snaps = []
+    cursor = ini.replace(day=1)
+    while cursor <= fin:
+        snap = end_of_month(cursor)
+        if snap > fin:
+            snap = fin
+        if snap >= ini:
+            snaps.append(snap)
+        cursor = date(cursor.year + (1 if cursor.month == 12 else 0), 1 if cursor.month == 12 else cursor.month + 1, 1)
+
+    serie = []
+    for s in snaps:
+        tot, deu, ef = total_en(s)
+        serie.append({"fecha": s, "total": tot, "deuda": deu, "efectivo": ef})
+
+    for i in range(len(serie)):
+        if i == 0:
+            serie[i]["delta_abs"] = None
+            serie[i]["delta_pct"] = None
+        else:
+            prev = serie[i-1]["total"]; cur = serie[i]["total"]
+            serie[i]["delta_abs"] = cur - prev
+            serie[i]["delta_pct"] = (None if prev == 0 else ((cur - prev) / prev) * 100.0)
+
+    return render_template(
+        "crecimiento_mensual.html",
+        ini=ini.isoformat(), fin=fin.isoformat(),
+        serie=serie, money=money
+    )
 
 
 # -------- Main --------
