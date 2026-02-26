@@ -140,8 +140,8 @@ def _parse_amount_relajado(txt: str):
 
 
 # ========= Esquema mínimo (SIN romper tu BD vieja) =========
-# - No crea tabla "pagos" (porque hoy es una VIEW)
-# - Crea/asegura historial_pagos, gastos, efectivo_diario
+# - No crea tabla "pagos" (porque en tu BD puede ser VIEW)
+# - Asegura historial_pagos, gastos, efectivo_diario
 MIGRATION_SQL = r"""
 CREATE TABLE IF NOT EXISTS clientes (
   id SERIAL PRIMARY KEY,
@@ -172,11 +172,9 @@ CREATE TABLE IF NOT EXISTS gastos (
   fecha DATE NOT NULL DEFAULT CURRENT_DATE,
   nota TEXT
 );
-
 CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos(fecha);
 
--- Índice único (1 pago por cliente por día) sobre la TABLA REAL
--- Puede fallar si ya hay duplicados por día; por eso el init_schema lo captura.
+-- Índice único: 1 pago por cliente por día (puede fallar si ya hay duplicados históricos)
 CREATE UNIQUE INDEX IF NOT EXISTS ux_historial_cliente_dia
 ON public.historial_pagos (cliente_id, (fecha_pago::date));
 """
@@ -192,7 +190,6 @@ def init_schema():
 try:
     init_schema()
 except Exception as e:
-    # Si hay duplicados históricos, este índice puede fallar; no tumba la app.
     print("WARN init schema:", e)
 
 
@@ -467,7 +464,7 @@ def cliente_editar(cliente_id):
                 WHERE id=%s;
             """, (nombre, monto, observaciones, fecha_prestamo, cliente_id))
 
-            # Recalcular deuda con base en pagos existentes
+            # Recalcular deuda exacta con base en pagos existentes
             recalc_deuda(conn, cliente_id)
 
         flash("Cliente actualizado.", "success")
@@ -498,7 +495,6 @@ def pagos_listado():
     conn = get_connection()
     try:
         with conn, conn.cursor() as cur:
-            # clientes para select
             cur.execute("SELECT id, nombre FROM clientes ORDER BY nombre;")
             clientes = cur.fetchall()
 
@@ -605,7 +601,6 @@ def pago_nuevo():
     conn = get_connection()
     try:
         with conn, conn.cursor() as cur:
-            # 1 pago por cliente por día
             cur.execute("""
                 SELECT 1
                 FROM historial_pagos
@@ -616,14 +611,12 @@ def pago_nuevo():
                 flash("ESTE CLIENTE YA PAGO HOY", "warning")
                 return redirect(url_for("pagos_listado", cliente_id=cliente_id))
 
-            # Insert
             cur.execute("""
                 INSERT INTO historial_pagos (cliente_id, pago, fecha_pago)
                 VALUES (%s, %s, (%s::date)::timestamp)
                 RETURNING id;
             """, (int(cliente_id), monto_norm, fecha_pago))
 
-            # Recalcular deuda exacta (evita errores acumulados)
             recalc_deuda(conn, int(cliente_id))
 
         flash("Pago registrado.", "success")
@@ -656,7 +649,6 @@ def pago_editar(pago_id):
 
             return render_template("editar_pago.html", pago=pago, clientes=clientes)
 
-        # POST
         cliente_id_nuevo = int(request.form.get("cliente_id"))
         monto = request.form.get("monto")
 
@@ -675,10 +667,9 @@ def pago_editar(pago_id):
                 flash("Pago no encontrado.", "warning")
                 return redirect(url_for("pagos_listado"))
 
-            cliente_id_old, pago_old, fecha_pago_ts = old[0], float(old[1] or 0), old[2]
+            cliente_id_old, _, fecha_pago_ts = old[0], float(old[1] or 0), old[2]
             dia = fecha_pago_ts.date()
 
-            # Validación: si cambia el cliente, que no exista pago ese día para ese cliente
             if cliente_id_nuevo != cliente_id_old:
                 cur.execute("""
                     SELECT 1
@@ -690,14 +681,12 @@ def pago_editar(pago_id):
                     flash("ESTE CLIENTE YA PAGO HOY", "warning")
                     return redirect(url_for("pagos_listado", cliente_id=cliente_id_nuevo))
 
-            # Update
             cur.execute("""
                 UPDATE historial_pagos
                 SET cliente_id=%s, pago=%s
                 WHERE id=%s;
             """, (cliente_id_nuevo, monto_nuevo, pago_id))
 
-            # Recalcular deudas exactas
             recalc_deuda(conn, int(cliente_id_old))
             recalc_deuda(conn, int(cliente_id_nuevo))
 
@@ -720,9 +709,7 @@ def pago_eliminar(pago_id):
                 return redirect(url_for("pagos_listado"))
 
             cliente_id = int(row[0])
-
             cur.execute("DELETE FROM historial_pagos WHERE id=%s;", (pago_id,))
-
             recalc_deuda(conn, cliente_id)
 
         flash("Pago eliminado.", "success")
@@ -981,32 +968,13 @@ def gasto_eliminar(gasto_id):
     return redirect(url_for("gastos"))
 
 
-# -------- Debug TZ (opcional) --------
-@app.get("/tzdebug")
-def tzdebug():
-    try:
-        with get_connection() as conn, conn.cursor() as cur:
-            cur.execute("SHOW TIME ZONE;")
-            db_tz = cur.fetchone()[0]
-            cur.execute("SELECT CURRENT_DATE, NOW(), (NOW() AT TIME ZONE 'America/Bogota');")
-            cd, now_db, now_co = cur.fetchone()
-        return {
-            "python_today_local": today_local().isoformat(),
-            "APP_TZ": str(APP_TZ),
-            "db_timezone": db_tz,
-            "db_current_date": cd.isoformat(),
-            "db_now": str(now_db),
-            "db_now_at_CO": str(now_co)
-        }
-    except Exception as e:
-        return {"error": str(e)}, 500
-        @app.get("/crecimiento")
+# ======================= Crecimiento (para que no rompa base.html) =======================
+@app.get("/crecimiento")
 @login_required
 def crecimiento():
     """
-    Version compatible con tu esquema viejo:
-    Total(fecha) = SUM(deuda) + efectivo_diario(fecha)
-    NOTA: deuda en clientes ya es "saldo actual", no "as-of" histórico.
+    Compatible con esquema viejo.
+    OJO: deuda en clientes es "saldo actual", no snapshot histórico real.
     """
     ini_str = (request.args.get("inicio") or "").strip()
     fin_str = (request.args.get("fin") or "").strip()
@@ -1037,8 +1005,6 @@ def crecimiento():
 
     def total_en(fecha_obj: date):
         with get_connection() as conn, conn.cursor() as cur:
-            # Como deuda es saldo actual, la "deuda_as_of" histórica real no existe en este esquema.
-            # Usamos el saldo actual como aproximación para que la pantalla funcione.
             cur.execute("SELECT COALESCE(SUM(deuda),0) FROM clientes;")
             deuda_total = float(cur.fetchone()[0] or 0)
 
@@ -1072,7 +1038,7 @@ def crecimiento():
             money=money
         )
 
-    # modo mensual (serie)
+    # modo mensual
     snaps = []
     cursor = ini.replace(day=1)
     while cursor <= fin:
@@ -1081,7 +1047,8 @@ def crecimiento():
             snap = fin
         if snap >= ini:
             snaps.append(snap)
-        cursor = date(cursor.year + (1 if cursor.month == 12 else 0), 1 if cursor.month == 12 else cursor.month + 1, 1)
+        cursor = date(cursor.year + (1 if cursor.month == 12 else 0),
+                      1 if cursor.month == 12 else cursor.month + 1, 1)
 
     serie = []
     for s in snaps:
@@ -1093,15 +1060,37 @@ def crecimiento():
             serie[i]["delta_abs"] = None
             serie[i]["delta_pct"] = None
         else:
-            prev = serie[i-1]["total"]; cur = serie[i]["total"]
-            serie[i]["delta_abs"] = cur - prev
-            serie[i]["delta_pct"] = (None if prev == 0 else ((cur - prev) / prev) * 100.0)
+            prev = serie[i-1]["total"]
+            curv = serie[i]["total"]
+            serie[i]["delta_abs"] = curv - prev
+            serie[i]["delta_pct"] = (None if prev == 0 else ((curv - prev) / prev) * 100.0)
 
     return render_template(
         "crecimiento_mensual.html",
         ini=ini.isoformat(), fin=fin.isoformat(),
         serie=serie, money=money
     )
+
+
+# -------- Debug TZ (opcional) --------
+@app.get("/tzdebug")
+def tzdebug():
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute("SHOW TIME ZONE;")
+            db_tz = cur.fetchone()[0]
+            cur.execute("SELECT CURRENT_DATE, NOW(), (NOW() AT TIME ZONE 'America/Bogota');")
+            cd, now_db, now_co = cur.fetchone()
+        return {
+            "python_today_local": today_local().isoformat(),
+            "APP_TZ": str(APP_TZ),
+            "db_timezone": db_tz,
+            "db_current_date": cd.isoformat(),
+            "db_now": str(now_db),
+            "db_now_at_CO": str(now_co)
+        }
+    except Exception as e:
+        return {"error": str(e)}, 500
 
 
 # -------- Main --------
