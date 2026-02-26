@@ -13,29 +13,23 @@
     .navbar-brand { letter-spacing: .5px; }
     .container-narrow { max-width: 1100px; }
     .navbar-metrics { gap: .5rem; }
-    .metric-chip {
-      display: inline-flex; align-items: center; gap: .4rem;
-      background: #fff; color: #0b2f26;
-      border: 1px solid rgba(0,0,0,.08);
-      border-radius: 999px; padding: .35rem .7rem;
-      font-weight: 600; font-size: .9rem;
-      box-shadow: 0 1px 2px rgba(0,0,0,.06);
-      white-space: nowrap;
+    .metric-chip{
+      display:inline-flex; align-items:center; gap:.4rem;
+      background:#fff; color:#0b2f26;
+      border:1px solid rgba(0,0,0,.08);
+      border-radius:999px; padding:.35rem .7rem;
+      font-weight:600; font-size:.9rem;
+      box-shadow:0 1px 2px rgba(0,0,0,.06);
+      white-space:nowrap;
     }
-    .metric-chip i { font-size: 1rem; opacity: .9; }
-    .metric-chip.deuda   { color: var(--bs-danger); }
-    .metric-chip.efectivo{ color: var(--bs-success); }
-    .metric-chip.total   { color: var(--bs-primary); }
+    .metric-chip i{ font-size:1rem; opacity:.9; }
+    .metric-chip.deuda{ color:var(--bs-danger); }
+    .metric-chip.efectivo{ color:var(--bs-success); }
+    .metric-chip.total{ color:var(--bs-primary); }
   </style>
 </head>
 
 <body class="bg-light">
-
-{# Defaults: nunca falla aunque inject_totales no corra #}
-{% set _money = money if money is defined else (lambda x: x) %}
-{% set _deuda_total = deuda_total if deuda_total is defined else 0 %}
-{% set _efectivo_hoy = efectivo_hoy if efectivo_hoy is defined else 0 %}
-{% set _total_general = total_general if total_general is defined else 0 %}
 
 {% if session.get("auth_ok") %}
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
@@ -59,9 +53,23 @@
       </ul>
 
       <div class="navbar-metrics d-none d-lg-inline-flex me-3">
-        <span class="metric-chip deuda"><i class="bi bi-exclamation-octagon"></i>Deuda: <strong>{{ _money(_deuda_total) }}</strong></span>
-        <span class="metric-chip efectivo"><i class="bi bi-cash-coin"></i>Efectivo hoy: <strong>{{ _money(_efectivo_hoy) }}</strong></span>
-        <span class="metric-chip total"><i class="bi bi-calculator"></i>Total: <strong>{{ _money(_total_general) }}</strong></span>
+        <span class="metric-chip deuda">
+          <i class="bi bi-exclamation-octagon"></i>
+          Deuda:
+          <strong>{% if money is defined %}{{ money(deuda_total|default(0)) }}{% else %}{{ deuda_total|default(0) }}{% endif %}</strong>
+        </span>
+
+        <span class="metric-chip efectivo">
+          <i class="bi bi-cash-coin"></i>
+          Efectivo hoy:
+          <strong>{% if money is defined %}{{ money(efectivo_hoy|default(0)) }}{% else %}{{ efectivo_hoy|default(0) }}{% endif %}</strong>
+        </span>
+
+        <span class="metric-chip total">
+          <i class="bi bi-calculator"></i>
+          Total:
+          <strong>{% if money is defined %}{{ money(total_general|default(0)) }}{% else %}{{ total_general|default(0) }}{% endif %}</strong>
+        </span>
       </div>
 
       <a class="btn btn-outline-light btn-sm" href="{{ url_for('logout') }}">Salir</a>
